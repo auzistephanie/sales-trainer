@@ -38,6 +38,8 @@ from sales_trainer import (
 from utils import (
     load_stats, save_stats,
     load_session, save_session, clear_session,
+    load_profile, save_profile,
+    load_setup_session, save_setup_session, clear_setup_session,
     send_telegram,
 )
 
@@ -63,6 +65,7 @@ def register_commands():
         {"command": "tip",      "description": "今日銷售技巧"},
         {"command": "help",      "description": "指令說明"},
         {"command": "mystatus", "description": "查看目前設定"},
+        {"command": "setup",    "description": "更改我的背景設定（行業／公司／產品）"},
     ]
     requests.post(
         f"https://api.telegram.org/bot{token}/setMyCommands",
@@ -152,6 +155,37 @@ def handle_tip():
     )
 
 
+# ── Profile Setup ─────────────────────────────────────────────────
+
+SETUP_INDUSTRIES = [
+    ("🛡️", "保險", "保險（人壽／醫療）"),
+    ("🏠", "地產", "地產代理"),
+    ("💰", "財務投資", "財務策劃／投資產品"),
+    ("💻", "B2B/SaaS", "B2B 服務／SaaS 軟件"),
+    ("📚", "培訓教育", "培訓課程／教育"),
+    ("🔗", "直銷/網絡", "直銷／網絡生意"),
+]
+
+
+def handle_setup_start(intro: bool = True):
+    """Step 1：揀行業。intro=True 顯示歡迎語。"""
+    keyboard = []
+    row = []
+    for i, (icon, short, _) in enumerate(SETUP_INDUSTRIES):
+        row.append({"text": f"{icon} {short}", "callback_data": f"setup_ind_{i}"})
+        if len(row) == 2:
+            keyboard.append(row)
+            row = []
+    if row:
+        keyboard.append(row)
+    msg = (
+        "👋 先設定你嘅 Sales 背景，令練習更貼近實際工作！\n\n🏭 你主要做邊個行業？"
+        if intro else
+        "🏭 揀你嘅行業："
+    )
+    send_telegram(msg, reply_markup={"inline_keyboard": keyboard})
+
+
 # ── Drill 選單 ────────────────────────────────────────────────────
 
 def handle_drill_menu():
@@ -202,6 +236,10 @@ def build_strategy_keyboard():
 
 
 def start_practice(force_objection: str = None, force_industry: str = None, difficulty: str = None):
+    # 用 profile 行業（除非明確指定）
+    if not force_industry:
+        profile = load_profile()
+        force_industry = profile.get("industry")
     display, scenario = generate_scenario(force_objection, force_industry, difficulty)
     save_session({"state": "waiting_strategy", "scenario": scenario})
     send_telegram(display, reply_markup=build_strategy_keyboard())
@@ -225,7 +263,7 @@ def handle_strategy_pick(strategy_key: str):
         return
 
     send_telegram("🤔 AI 評估緊你嘅策略選擇，稍等⋯⋯")
-    feedback = evaluate_strategy(strategy_key, scenario)
+    feedback = evaluate_strategy(strategy_key, scenario, profile=load_profile())
 
     # 解析分數
     match = re.search(r"策略評估[：:]\s*([1-4])", feedback)
@@ -257,7 +295,7 @@ def handle_user_response(user_text: str):
     obj_name = scenario["objection"]["name"]
 
     send_telegram("🤔 AI 評估緊你嘅回應，稍等⋯⋯")
-    feedback = evaluate_response(user_text, scenario)
+    feedback = evaluate_response(user_text, scenario, profile=load_profile())
 
     # 解析分數
     match = re.search(r"評分[：:]\s*([1-4])", feedback)
@@ -293,6 +331,27 @@ def handle_callback(cb: dict):
             kwargs={"force_industry": preferred},
             daemon=True,
         ).start()
+
+    elif data.startswith("setup_ind_"):
+        idx = int(data[len("setup_ind_"):])
+        if idx < len(SETUP_INDUSTRIES):
+            _, _, full_name = SETUP_INDUSTRIES[idx]
+            profile = load_profile()
+            profile["industry"] = full_name
+            save_profile(profile)
+            stats = load_stats()
+            stats["preferred_industry"] = full_name
+            save_stats(stats)
+            answer_callback(cb["id"], f"✅ {full_name}")
+            save_setup_session({"state": "setup_company"})
+            send_telegram(f"✅ 行業：{full_name}\n\n🏢 你係邊間公司 / 機構做嘅？（直接打名）")
+        else:
+            answer_callback(cb["id"], "出錯，請再試")
+
+    elif data == "do_setup":
+        answer_callback(cb["id"])
+        clear_setup_session()
+        handle_setup_start(intro=False)
 
     elif data == "practice_change_industry":
         answer_callback(cb["id"])
@@ -354,6 +413,31 @@ def cmd(text: str, command: str) -> bool:
 
 
 def handle_message(text: str):
+    # Setup session 中：非指令訊息 = 填寫公司 / 產品
+    setup = load_setup_session()
+    if setup and not text.startswith("/"):
+        state = setup.get("state")
+        if state == "setup_company":
+            profile = load_profile()
+            profile["company"] = text.strip()
+            save_profile(profile)
+            save_setup_session({"state": "setup_product"})
+            send_telegram(f"✅ 公司：{text.strip()}\n\n📦 你主要賣咩產品或服務？（直接打出來）")
+            return
+        elif state == "setup_product":
+            profile = load_profile()
+            profile["product"] = text.strip()
+            save_profile(profile)
+            clear_setup_session()
+            send_telegram(
+                f"✅ 設定完成！\n\n"
+                f"🏭 行業：{profile.get('industry', '')}\n"
+                f"🏢 公司：{profile.get('company', '')}\n"
+                f"📦 產品：{text.strip()}\n\n"
+                f"用 /practice 開始練習！"
+            )
+            return
+
     # 練習 session 中：非指令訊息 = 用戶回應
     session = load_session()
     if session and session.get("state") in ("waiting_response", "waiting_strategy") and not text.startswith("/"):
@@ -365,61 +449,51 @@ def handle_message(text: str):
         threading.Thread(target=handle_user_response, args=(text,), daemon=True).start()
         return
 
+    if cmd(text, "/setup"):
+        clear_setup_session()
+        handle_setup_start(intro=False)
+        return
+
     if cmd(text, "/help") or cmd(text, "/start"):
+        profile = load_profile()
+        if not profile.get("industry"):
+            handle_setup_start(intro=True)
+            return
         send_telegram(
             "🥊 銷售話術訓練機器人\n\n"
             "/practice — 隨機練習一個場景\n"
             "/practice 初級／中級／高級 — 指定難度\n"
-            "/practice 保險 — 指定行業\n"
             "/drill — 針對特定拒絕類型\n"
             "/stats — 查看進度報告\n"
             "/streak — 練習連續天數\n"
-            "/tip — 今日銷售技巧\n\n"
+            "/tip — 今日銷售技巧\n"
+            "/setup — 更改我的背景設定\n\n"
             "💡 每日練習 5 分鐘，90 日後成交率會嚇親自己"
         )
         return
 
     if cmd(text, "/practice"):
+        profile = load_profile()
+        if not profile.get("industry"):
+            handle_setup_start(intro=True)
+            return
+
         parts = text.split(maxsplit=1)
         extra = parts[1].strip() if len(parts) > 1 else None
         diff  = extra if extra in DIFFICULTY_LEVELS else None
-        ind   = extra if extra and extra not in DIFFICULTY_LEVELS else None
 
-        if ind:
-            # 明確指定行業：儲存並開始
-            stats = load_stats()
-            # 嘗試模糊匹配
-            from sales_trainer import INDUSTRIES
-            matched = next((x for x in INDUSTRIES if ind in x), None)
-            if matched:
-                stats["preferred_industry"] = matched
-                save_stats(stats)
-                ind = matched
-            send_telegram("🎯 生成練習場景⋯⋯")
-            threading.Thread(
-                target=start_practice,
-                kwargs={"force_industry": ind, "difficulty": diff},
-                daemon=True,
-            ).start()
-        else:
-            stats = load_stats()
-            preferred = stats.get("preferred_industry")
-            if preferred:
-                # 有偏好行業：直接開始，附「換行業」button
-                send_telegram(
-                    f"🎯 生成練習場景⋯⋯\n（行業：{preferred}）",
-                    reply_markup={"inline_keyboard": [[
-                        {"text": "🔄 換行業", "callback_data": "practice_change_industry"}
-                    ]]}
-                )
-                threading.Thread(
-                    target=start_practice,
-                    kwargs={"force_industry": preferred, "difficulty": diff},
-                    daemon=True,
-                ).start()
-            else:
-                # 首次：顯示行業選擇 keyboard
-                handle_industry_menu("🏭 第一次練習，先揀你嘅主要行業：")
+        industry = profile.get("industry")
+        send_telegram(
+            f"🎯 生成練習場景⋯⋯",
+            reply_markup={"inline_keyboard": [[
+                {"text": "⚙️ 改設定", "callback_data": "do_setup"},
+            ]]}
+        )
+        threading.Thread(
+            target=start_practice,
+            kwargs={"difficulty": diff},
+            daemon=True,
+        ).start()
         return
 
     if cmd(text, "/drill"):
