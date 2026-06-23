@@ -194,11 +194,12 @@ def generate_scenario(force_objection: str = None, force_industry: str = None, d
     return display, s
 
 
-def evaluate_strategy(strategy_key: str, scenario: dict, max_retries: int = 3) -> str:
+def evaluate_strategy(strategy_key: str, scenario: dict, max_retries: int = 3, profile: dict = None) -> str:
     """評估用戶揀嘅策略係咪正確，返回評分＋分析＋最佳示範。"""
     client  = OpenAI(api_key=DEEPSEEK_API_KEY, base_url="https://api.deepseek.com")
     obj     = scenario["objection"]
     persona = scenario["persona"]
+    profile = profile or {}
 
     strategy = next((s for s in STRATEGIES if s["key"] == strategy_key), None)
     if not strategy:
@@ -206,8 +207,14 @@ def evaluate_strategy(strategy_key: str, scenario: dict, max_retries: int = 3) -
 
     all_strategies = "\n".join(f"- {s['label']}：{s['desc']}" for s in STRATEGIES)
 
-    prompt = f"""你係頂尖銷售培訓教練。學員喺以下場景揀咗一個應對策略，請評估。
+    profile_ctx = ""
+    if profile.get("company") or profile.get("product"):
+        profile_ctx = "\n【學員背景】\n"
+        if profile.get("company"): profile_ctx += f"公司：{profile['company']}\n"
+        if profile.get("product"): profile_ctx += f"產品／服務：{profile['product']}\n"
 
+    prompt = f"""你係頂尖銷售培訓教練。學員喺以下場景揀咗一個應對策略，請評估。
+{profile_ctx}
 【練習場景】
 行業：{scenario['industry']}
 場景：{scenario['scenario']}
@@ -233,7 +240,7 @@ def evaluate_strategy(strategy_key: str, scenario: dict, max_retries: int = 3) -
 （如果學員揀咗最佳就話「啱嘅！」，否則說明係邊個策略更有效同點解）
 
 **━━ 最佳示範回應 ━━**
-（用廣東話口語，配合學員揀嘅策略，自然流暢，針對呢個客戶性格）
+（用廣東話口語，配合學員揀嘅策略，自然流暢，針對呢個客戶性格{('，帶入公司：' + profile['company']) if profile.get('company') else ''}）
 
 **━━ 技巧重點 ━━**
 {obj['tip']}"""
@@ -255,14 +262,21 @@ def evaluate_strategy(strategy_key: str, scenario: dict, max_retries: int = 3) -
 
 # ── AI 評估 ───────────────────────────────────────────────────────
 
-def evaluate_response(user_response: str, scenario: dict, max_retries: int = 3) -> str:
+def evaluate_response(user_response: str, scenario: dict, max_retries: int = 3, profile: dict = None) -> str:
     """用 DeepSeek 評估用戶銷售回應，返回評分＋反饋＋最佳示範。"""
     client  = OpenAI(api_key=DEEPSEEK_API_KEY, base_url="https://api.deepseek.com")
     obj     = scenario["objection"]
     persona = scenario["persona"]
+    profile = profile or {}
+
+    profile_ctx = ""
+    if profile.get("company") or profile.get("product"):
+        profile_ctx = "\n【學員背景】\n"
+        if profile.get("company"): profile_ctx += f"公司：{profile['company']}\n"
+        if profile.get("product"): profile_ctx += f"產品／服務：{profile['product']}\n"
 
     prompt = f"""你係一個頂尖銷售培訓教練，同時扮演客戶角色。
-
+{profile_ctx}
 【練習場景】
 行業：{scenario['industry']}
 場景：{scenario['scenario']}
@@ -287,7 +301,7 @@ def evaluate_response(user_response: str, scenario: dict, max_retries: int = 3) 
 需要改善：
 
 **━━ 最佳示範回應 ━━**
-（用廣東話口語，自然流暢，符合香港銷售實戰習慣，針對呢個客戶性格同拒絕類型）
+（用廣東話口語，自然流暢，符合香港銷售實戰習慣，針對呢個客戶性格同拒絕類型{('，以' + profile['company'] + '銷售員身份') if profile.get('company') else ''}）
 
 **━━ 技巧重點 ━━**
 {obj['tip']}"""
