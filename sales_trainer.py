@@ -239,3 +239,90 @@ def evaluate_response(user_response: str, scenario: dict, max_retries: int = 3) 
             last_err = e
             print(f"[evaluate_response] 第{attempt}次失敗：{e}")
     return f"⚠️ 評估失敗（已重試 {max_retries} 次）：{last_err}"
+
+
+# ── 對話分析 ──────────────────────────────────────────────────────
+
+def analyze_conversation(conversation: str, profile: dict) -> str:
+    industry = profile.get("industry", "銷售")
+    company  = profile.get("company", "")
+    product  = profile.get("product", "")
+    ctx = f"行業：{industry}"
+    if company: ctx += f"\n公司：{company}"
+    if product: ctx += f"\n產品：{product}"
+    prompt = f"""你係資深銷售教練，分析以下真實銷售對話並給出具體建議。
+
+【銷售背景】
+{ctx}
+
+【真實對話記錄】
+{conversation}
+
+用廣東話，以下格式輸出：
+
+⚠️ **失分關鍵點：**
+[列出 2-3 個具體失分位，每點一行，指出對話哪句出問題]
+
+✅ **應該咁講：**
+[針對每個失分點，給出更強嘅替代話術]
+
+🔄 **挽救方案：**
+[如果而家想重新聯絡，建議發咩訊息，直接提供可用腳本]
+
+📈 **下次記住：**
+[一句精華總結，銘記於心]"""
+    resp = client.chat.completions.create(
+        model="deepseek-chat",
+        messages=[{"role": "user", "content": prompt}],
+        max_tokens=700, temperature=0.7,
+    )
+    return resp.choices[0].message.content.strip()
+
+
+# ── 社交媒體 ──────────────────────────────────────────────────────
+
+SOCIAL_PLATFORMS = ["FB 評論", "IG 評論", "WhatsApp DM"]
+SOCIAL_CONTENT_TYPES = ["銷售貼文", "DM 開場腳本", "評論回覆範本"]
+
+SOCIAL_COMMENTS = {
+    "FB 評論": ["呢啲係咪真㗎？唔好唔好用","貴到離晒地，唔抵買","我朋友買過，話冇用","有冇折扣㗎？","係咪傳銷㗎？"],
+    "IG 評論": ["呢啲唔抵買，係呃人㗎","幾多錢？inbox 我","有冇試用㗎先？","我都想買但驚係假","比 XX 差好多"],
+    "WhatsApp DM": ["你好，我係睇到你IG post，想了解下","幾錢㗎？直接講","我要考慮下，唔急","我朋友話唔好用","我已經有買緊其他嘅"],
+}
+
+def generate_social_scenario(platform: str, profile: dict) -> tuple:
+    import random
+    company = profile.get("company","") or profile.get("industry","銷售")
+    comment = random.choice(SOCIAL_COMMENTS.get(platform, SOCIAL_COMMENTS["IG 評論"]))
+    display = (f"📱 {platform} 場景\n{'─'*28}\n"
+               f"你喺 {platform} 宣傳 {company}，有人留言：\n\n「{comment}」\n\n點回覆？")
+    return display, {"type":"social","platform":platform,"comment":comment,"profile":profile}
+
+def evaluate_social_response(user_response: str, scenario: dict) -> str:
+    platform = scenario["platform"]; comment = scenario["comment"]
+    company = scenario.get("profile",{}).get("company","你哋公司")
+    prompt = f"""你係社交媒體銷售教練，評估以下回覆。
+平台：{platform}\n客戶留言：「{comment}」\n銷售員回覆：{user_response}\n公司：{company}
+
+廣東話輸出：
+**效果預測：**[客戶反應，2句]
+**評分：[1-4]**\n1=嚇走客戶 2=無功而返 3=有機會轉化 4=完美引入inbox
+**點評：**[具體2句]
+**更強版本：**[可直接用，40字內]"""
+    resp = client.chat.completions.create(model="deepseek-chat",
+        messages=[{"role":"user","content":prompt}],max_tokens=500,temperature=0.7)
+    return resp.choices[0].message.content.strip()
+
+def generate_social_content(content_type: str, profile: dict) -> str:
+    industry = profile.get("industry","銷售"); company = profile.get("company","")
+    product  = profile.get("product","")
+    ctx = f"行業：{industry}" + (f"，公司：{company}" if company else "") + (f"，產品：{product}" if product else "")
+    prompts = {
+        "銷售貼文": f"幫我寫一篇 IG/FB 銷售貼文。{ctx}\n要求：廣東話貼地，痛點hook開頭，展示價值唔硬銷，結尾CTA叫人inbox，200字內加emoji，附3個hashtag",
+        "DM 開場腳本": f"幫我寫完整WhatsApp DM銷售腳本。{ctx}\n包括：1.開場暖身 2.了解需求問題 3.自然介紹產品 4.處理「要考慮下」 5.成交收尾。廣東話自然語氣，每段附解釋",
+        "評論回覆範本": f"幫我寫5套社交媒體評論回覆範本。{ctx}\n針對：1.太貴 2.係咪真 3.有冇試用 4.我考慮下 5.有冇折扣。每套廣東話親切專業，引導入inbox，30字內",
+    }
+    resp = client.chat.completions.create(model="deepseek-chat",
+        messages=[{"role":"user","content":prompts.get(content_type,prompts["銷售貼文"])}],
+        max_tokens=800,temperature=0.8)
+    return resp.choices[0].message.content.strip()

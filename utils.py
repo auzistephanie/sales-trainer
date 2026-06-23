@@ -124,3 +124,13 @@ def send_telegram(text: str, reply_markup=None, max_retries: int = 3):
                 print(f"Telegram 失敗（第{attempt}次）: {resp.status_code}")
             except requests.RequestException as e:
                 print(f"Telegram 異常（第{attempt}次）: {e}")
+
+
+def load_profile():
+    v = _redis(["GET","sales_profile"]); return json.loads(v) if v else {}
+def save_profile(d): _redis(["SET","sales_profile",json.dumps(d,ensure_ascii=False)])
+
+def load_setup_session():
+    v = _redis(["GET","sales_setup_session"]); return json.loads(v) if v else {}
+def save_setup_session(d): _redis(["SET","sales_setup_session",json.dumps(d,ensure_ascii=False),"EX",600])
+def clear_setup_session(): _redis(["DEL","sales_setup_session"])
