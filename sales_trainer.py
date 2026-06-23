@@ -95,6 +95,13 @@ SCORE_LABELS = {
     4: "🌟 出色",
 }
 
+STRATEGIES = [
+    {"key": "empathy", "label": "🤝 同理心先行", "desc": "先承認客戶感受，消除防衛，再引導"},
+    {"key": "probe",   "label": "🔍 探問真因",   "desc": "用問題找出背後真實顧慮"},
+    {"key": "value",   "label": "💎 展示價值",   "desc": "直接呈現產品獨特優勢與回報"},
+    {"key": "social",  "label": "👥 社會佐證",   "desc": "用客戶案例、數字建立信任"},
+]
+
 
 # ── DNA 抽選（防重複）────────────────────────────────────────────
 
@@ -182,9 +189,68 @@ def generate_scenario(force_objection: str = None, force_industry: str = None, d
         f"⚡ 難度：{s['difficulty']}\n"
         f"━━━━━━━━━━━━━━━━━━━━\n\n"
         f"客戶說：\n「{obj['client_line']}」\n\n"
-        f"💬 你點答？直接打出你嘅回應 ⬇️"
+        f"👇 揀你嘅應對策略，或者直接打出回應"
     )
     return display, s
+
+
+def evaluate_strategy(strategy_key: str, scenario: dict, max_retries: int = 3) -> str:
+    """評估用戶揀嘅策略係咪正確，返回評分＋分析＋最佳示範。"""
+    client  = OpenAI(api_key=DEEPSEEK_API_KEY, base_url="https://api.deepseek.com")
+    obj     = scenario["objection"]
+    persona = scenario["persona"]
+
+    strategy = next((s for s in STRATEGIES if s["key"] == strategy_key), None)
+    if not strategy:
+        return "⚠️ 未知策略"
+
+    all_strategies = "\n".join(f"- {s['label']}：{s['desc']}" for s in STRATEGIES)
+
+    prompt = f"""你係頂尖銷售培訓教練。學員喺以下場景揀咗一個應對策略，請評估。
+
+【練習場景】
+行業：{scenario['industry']}
+場景：{scenario['scenario']}
+難度：{scenario['difficulty']} — {DIFFICULTY_LEVELS[scenario['difficulty']]}
+客戶性格：{persona['name']} — {persona['desc']}
+拒絕類型：{obj['name']}
+客戶說：「{obj['client_line']}」
+
+【可選策略】
+{all_strategies}
+
+【學員揀咗】：{strategy['label']} — {strategy['desc']}
+
+【輸出格式——嚴格跟住以下結構，廣東話口語】
+
+**策略評估：X／4**
+（1=方向完全錯 ｜ 2=方向尚可但非最優 ｜ 3=好選擇 ｜ 4=最佳策略）
+
+**點解：**
+（2-3句，解釋呢個策略係咪適合呢個客戶性格同拒絕類型，要具體）
+
+**最佳策略係：**
+（如果學員揀咗最佳就話「啱嘅！」，否則說明係邊個策略更有效同點解）
+
+**━━ 最佳示範回應 ━━**
+（用廣東話口語，配合學員揀嘅策略，自然流暢，針對呢個客戶性格）
+
+**━━ 技巧重點 ━━**
+{obj['tip']}"""
+
+    last_err = None
+    for attempt in range(1, max_retries + 1):
+        try:
+            resp = client.chat.completions.create(
+                model="deepseek-chat",
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.8,
+                max_tokens=900,
+            )
+            return resp.choices[0].message.content
+        except Exception as e:
+            last_err = e
+    return f"⚠️ 評估失敗（已重試 {max_retries} 次）：{last_err}"
 
 
 # ── AI 評估 ───────────────────────────────────────────────────────
