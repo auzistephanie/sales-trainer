@@ -10,6 +10,7 @@ BASE_DIR = Path(__file__).parent
 load_dotenv(BASE_DIR / ".env")
 
 DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
+client = OpenAI(api_key=DEEPSEEK_API_KEY, base_url="https://api.deepseek.com")
 
 from utils import load_recent_dna, save_recent_dna, send_telegram
 
