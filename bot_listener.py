@@ -178,6 +178,7 @@ def handle_setup_start(intro: bool = True):
             row = []
     if row:
         keyboard.append(row)
+    keyboard.append([{"text": "✏️ 自定行業", "callback_data": "setup_ind_custom"}])
     msg = (
         "👋 先設定你嘅 Sales 背景，令練習更貼近實際工作！\n\n🏭 你主要做邊個行業？"
         if intro else
@@ -332,6 +333,11 @@ def handle_callback(cb: dict):
             daemon=True,
         ).start()
 
+    elif data == "setup_ind_custom":
+        answer_callback(cb["id"])
+        save_setup_session({"state": "setup_industry_custom"})
+        send_telegram("✏️ 打出你嘅行業（例如：美容、網絡行銷、汽車）：")
+
     elif data.startswith("setup_ind_"):
         idx = int(data[len("setup_ind_"):])
         if idx < len(SETUP_INDUSTRIES):
@@ -417,6 +423,16 @@ def handle_message(text: str):
     setup = load_setup_session()
     if setup and not text.startswith("/"):
         state = setup.get("state")
+        if state == "setup_industry_custom":
+            profile = load_profile()
+            profile["industry"] = text.strip()
+            save_profile(profile)
+            stats = load_stats()
+            stats["preferred_industry"] = text.strip()
+            save_stats(stats)
+            save_setup_session({"state": "setup_company"})
+            send_telegram(f"✅ 行業：{text.strip()}\n\n🏢 你係邊間公司 / 機構做嘅？（直接打名）")
+            return
         if state == "setup_company":
             profile = load_profile()
             profile["company"] = text.strip()
