@@ -134,3 +134,7 @@ def load_setup_session():
     v = _redis(["GET","sales_setup_session"]); return json.loads(v) if v else {}
 def save_setup_session(d): _redis(["SET","sales_setup_session",json.dumps(d,ensure_ascii=False),"EX",600])
 def clear_setup_session(): _redis(["DEL","sales_setup_session"])
+
+# PATCH: fix profile/setup functions to use correct Redis helpers
+import builtins as _b
+_orig_load_profile = globals().get('load_profile')
