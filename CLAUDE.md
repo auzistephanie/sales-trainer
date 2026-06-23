@@ -45,5 +45,12 @@ Redis key `sales_session`（TTL 600s）：
 - 執行：`python3 bot_listener.py`（常駐）
 - LaunchAgent plist 可按 daily-novel 模式設置
 
+## GitHub Push
+- 用 GitHub API 直接 push，唔用 git CLI（避免 lock file 問題）
+- 指令：`python3 github_push.py "<commit message>"`
+- `.env` 需要：`GITHUB_TOKEN` + `GITHUB_REPO=auzistephanie/sales-trainer`
+- **規則：每次改完檔案，Claude 必須自動 push，唔需要 Stephanie 另外要求**
+- commit message 要具體描述改動（唔好用 "update files"）
+
 ## 改版歷史
 - **2026-06-23**：初版創建，10 種拒絕類型、8 種客戶性格、狀態機練習流程
