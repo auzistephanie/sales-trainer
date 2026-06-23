@@ -32,8 +32,8 @@ logging.basicConfig(
 log = logging.getLogger(__name__)
 
 from sales_trainer import (
-    generate_scenario, evaluate_response,
-    OBJECTION_TYPES, INDUSTRIES, DIFFICULTY_LEVELS,
+    generate_scenario, evaluate_response, evaluate_strategy,
+    OBJECTION_TYPES, INDUSTRIES, DIFFICULTY_LEVELS, STRATEGIES,
 )
 from utils import (
     load_stats, save_stats,
@@ -185,10 +185,64 @@ def handle_industry_menu(prompt_text: str = "🏭 揀你嘅行業："):
 
 # ── 練習 Session ──────────────────────────────────────────────────
 
+def build_strategy_keyboard():
+    """生成策略選擇 inline keyboard。"""
+    keyboard = []
+    row = []
+    for s in STRATEGIES:
+        row.append({"text": s["label"], "callback_data": f"strategy_{s['key']}"})
+        if len(row) == 2:
+            keyboard.append(row)
+            row = []
+    if row:
+        keyboard.append(row)
+    keyboard.append([{"text": "✏️ 自由輸入", "callback_data": "strategy_freetext"}])
+    return {"inline_keyboard": keyboard}
+
+
 def start_practice(force_objection: str = None, force_industry: str = None, difficulty: str = None):
     display, scenario = generate_scenario(force_objection, force_industry, difficulty)
-    save_session({"state": "waiting_response", "scenario": scenario})
-    send_telegram(display)
+    save_session({"state": "waiting_strategy", "scenario": scenario})
+    send_telegram(display, reply_markup=build_strategy_keyboard())
+
+
+def handle_strategy_pick(strategy_key: str):
+    """處理用戶揀咗策略 button。"""
+    session = load_session()
+    if not session or session.get("state") not in ("waiting_strategy", "waiting_response"):
+        send_telegram("唔係練習模式。用 /practice 開始新練習！")
+        return
+
+    scenario = session["scenario"]
+    obj_name = scenario["objection"]["name"]
+    clear_session()
+
+    if strategy_key == "freetext":
+        # 切換到自由輸入模式
+        save_session({"state": "waiting_response", "scenario": scenario})
+        send_telegram("✏️ 好，直接打出你嘅回應 ⬇️")
+        return
+
+    send_telegram("🤔 AI 評估緊你嘅策略選擇，稍等⋯⋯")
+    feedback = evaluate_strategy(strategy_key, scenario)
+
+    # 解析分數
+    match = re.search(r"策略評估[：:]\s*([1-4])", feedback)
+    score = int(match.group(1)) if match else None
+    if score:
+        record_score(obj_name, score)
+
+    replay_kb = {"inline_keyboard": [
+        [
+            {"text": "🔄 再練一個",           "callback_data": "practice_new"},
+            {"text": f"🎯 再練「{obj_name}」", "callback_data": f"drill_{obj_name}"},
+        ],
+        [
+            {"text": "🏭 換行業",             "callback_data": "practice_change_industry"},
+            {"text": "📊 睇進度",             "callback_data": "show_stats"},
+        ],
+    ]}
+    send_telegram(feedback, reply_markup=replay_kb)
 
 
 def handle_user_response(user_text: str):
@@ -271,6 +325,15 @@ def handle_callback(cb: dict):
         answer_callback(cb["id"])
         handle_stats()
 
+    elif data.startswith("strategy_"):
+        strategy_key = data[len("strategy_"):]
+        answer_callback(cb["id"], "評估緊⋯⋯" if strategy_key != "freetext" else "自由輸入模式")
+        threading.Thread(
+            target=handle_strategy_pick,
+            args=(strategy_key,),
+            daemon=True,
+        ).start()
+
     elif data.startswith("drill_"):
         obj_name = data[6:]
         answer_callback(cb["id"], f"生成「{obj_name}」場景⋯⋯")
@@ -292,8 +355,12 @@ def cmd(text: str, command: str) -> bool:
 def handle_message(text: str):
     # 練習 session 中：非指令訊息 = 用戶回應
     session = load_session()
-    if session and session.get("state") == "waiting_response" and not text.startswith("/"):
+    if session and session.get("state") in ("waiting_response", "waiting_strategy") and not text.startswith("/"):
         log.info(f"練習回應: {text[:60]!r}")
+        # waiting_strategy 狀態下直接打字，視作自由輸入回應
+        if session.get("state") == "waiting_strategy":
+            session["state"] = "waiting_response"
+            save_session(session)
         threading.Thread(target=handle_user_response, args=(text,), daemon=True).start()
         return
 
