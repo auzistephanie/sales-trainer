@@ -167,6 +167,22 @@ def handle_drill_menu():
     send_telegram("🎯 選擇你想針對練習的拒絕類型：", reply_markup={"inline_keyboard": keyboard})
 
 
+def handle_industry_menu(prompt_text: str = "🏭 揀你嘅行業："):
+    """顯示行業選擇 inline keyboard。"""
+    keyboard = []
+    row = []
+    icons = ["🛡️", "🏠", "💰", "💻", "📚", "🔗"]
+    short_names = ["保險", "地產", "財務投資", "B2B/SaaS", "培訓教育", "直銷/網絡"]
+    for i, (icon, short) in enumerate(zip(icons, short_names)):
+        row.append({"text": f"{icon} {short}", "callback_data": f"industry_pick_{i}"})
+        if len(row) == 2:
+            keyboard.append(row)
+            row = []
+    if row:
+        keyboard.append(row)
+    send_telegram(prompt_text, reply_markup={"inline_keyboard": keyboard})
+
+
 # ── 練習 Session ──────────────────────────────────────────────────
 
 def start_practice(force_objection: str = None, force_industry: str = None, difficulty: str = None):
@@ -194,10 +210,16 @@ def handle_user_response(user_text: str):
     if score:
         record_score(obj_name, score)
 
-    replay_kb = {"inline_keyboard": [[
-        {"text": "🔄 再練一個",          "callback_data": "practice_new"},
-        {"text": f"🎯 再練「{obj_name}」", "callback_data": f"drill_{obj_name}"},
-    ]]}
+    replay_kb = {"inline_keyboard": [
+        [
+            {"text": "🔄 再練一個",          "callback_data": "practice_new"},
+            {"text": f"🎯 再練「{obj_name}」", "callback_data": f"drill_{obj_name}"},
+        ],
+        [
+            {"text": "🏭 換行業",            "callback_data": "practice_change_industry"},
+            {"text": "📊 睇進度",            "callback_data": "show_stats"},
+        ],
+    ]}
     send_telegram(feedback, reply_markup=replay_kb)
 
 
@@ -208,14 +230,55 @@ def handle_callback(cb: dict):
 
     if data == "practice_new":
         answer_callback(cb["id"], "生成新場景⋯⋯")
-        threading.Thread(target=start_practice, daemon=True).start()
+        # 沿用偏好行業
+        stats = load_stats()
+        preferred = stats.get("preferred_industry")
+        threading.Thread(
+            target=start_practice,
+            kwargs={"force_industry": preferred},
+            daemon=True,
+        ).start()
+
+    elif data == "practice_change_industry":
+        answer_callback(cb["id"])
+        handle_industry_menu("🔄 換行業——揀新嘅行業：")
+
+    elif data.startswith("industry_pick_"):
+        idx = int(data[len("industry_pick_"):])
+        industry_list = [
+            "保險（人壽／醫療）",
+            "地產代理",
+            "財務策劃／投資產品",
+            "B2B 服務／SaaS 軟件",
+            "培訓課程／教育",
+            "直銷／網絡生意",
+        ]
+        chosen = industry_list[idx] if idx < len(industry_list) else None
+        if chosen:
+            stats = load_stats()
+            stats["preferred_industry"] = chosen
+            save_stats(stats)
+            answer_callback(cb["id"], f"已選：{chosen}")
+            threading.Thread(
+                target=start_practice,
+                kwargs={"force_industry": chosen},
+                daemon=True,
+            ).start()
+        else:
+            answer_callback(cb["id"], "揀取失敗，請再試")
+
+    elif data == "show_stats":
+        answer_callback(cb["id"])
+        handle_stats()
 
     elif data.startswith("drill_"):
         obj_name = data[6:]
         answer_callback(cb["id"], f"生成「{obj_name}」場景⋯⋯")
+        stats = load_stats()
+        preferred = stats.get("preferred_industry")
         threading.Thread(
             target=start_practice,
-            kwargs={"force_objection": obj_name},
+            kwargs={"force_objection": obj_name, "force_industry": preferred},
             daemon=True,
         ).start()
 
@@ -249,16 +312,46 @@ def handle_message(text: str):
         return
 
     if cmd(text, "/practice"):
-        parts  = text.split(maxsplit=1)
-        extra  = parts[1].strip() if len(parts) > 1 else None
-        diff   = extra if extra in DIFFICULTY_LEVELS else None
-        ind    = extra if extra and extra not in DIFFICULTY_LEVELS else None
-        send_telegram("🎯 生成練習場景⋯⋯")
-        threading.Thread(
-            target=start_practice,
-            kwargs={"force_industry": ind, "difficulty": diff},
-            daemon=True,
-        ).start()
+        parts = text.split(maxsplit=1)
+        extra = parts[1].strip() if len(parts) > 1 else None
+        diff  = extra if extra in DIFFICULTY_LEVELS else None
+        ind   = extra if extra and extra not in DIFFICULTY_LEVELS else None
+
+        if ind:
+            # 明確指定行業：儲存並開始
+            stats = load_stats()
+            # 嘗試模糊匹配
+            from sales_trainer import INDUSTRIES
+            matched = next((x for x in INDUSTRIES if ind in x), None)
+            if matched:
+                stats["preferred_industry"] = matched
+                save_stats(stats)
+                ind = matched
+            send_telegram("🎯 生成練習場景⋯⋯")
+            threading.Thread(
+                target=start_practice,
+                kwargs={"force_industry": ind, "difficulty": diff},
+                daemon=True,
+            ).start()
+        else:
+            stats = load_stats()
+            preferred = stats.get("preferred_industry")
+            if preferred:
+                # 有偏好行業：直接開始，附「換行業」button
+                send_telegram(
+                    f"🎯 生成練習場景⋯⋯\n（行業：{preferred}）",
+                    reply_markup={"inline_keyboard": [[
+                        {"text": "🔄 換行業", "callback_data": "practice_change_industry"}
+                    ]]}
+                )
+                threading.Thread(
+                    target=start_practice,
+                    kwargs={"force_industry": preferred, "difficulty": diff},
+                    daemon=True,
+                ).start()
+            else:
+                # 首次：顯示行業選擇 keyboard
+                handle_industry_menu("🏭 第一次練習，先揀你嘅主要行業：")
         return
 
     if cmd(text, "/drill"):
