@@ -33,7 +33,10 @@ log = logging.getLogger(__name__)
 
 from sales_trainer import (
     generate_scenario, evaluate_response, evaluate_strategy,
+    generate_social_scenario, evaluate_social_response, generate_social_content,
+    analyze_conversation,
     OBJECTION_TYPES, INDUSTRIES, DIFFICULTY_LEVELS, STRATEGIES,
+    SOCIAL_PLATFORMS, SOCIAL_CONTENT_TYPES,
 )
 from utils import (
     load_stats, save_stats,
@@ -65,6 +68,8 @@ def register_commands():
         {"command": "tip",      "description": "今日銷售技巧"},
         {"command": "help",      "description": "指令說明"},
         {"command": "mystatus", "description": "查看目前設定"},
+        {"command": "social",   "description": "社交媒體銷售練習 / 生成內容"},
+        {"command": "review",   "description": "貼真實對話，AI 分析失分點"},
         {"command": "setup",    "description": "更改我的背景設定（行業／公司／產品）"},
     ]
     requests.post(
@@ -217,6 +222,58 @@ def handle_industry_menu(prompt_text: str = "🏭 揀你嘅行業："):
     if row:
         keyboard.append(row)
     send_telegram(prompt_text, reply_markup={"inline_keyboard": keyboard})
+
+
+# ── Social 選單 ───────────────────────────────────────────────────
+
+def handle_social_menu():
+    keyboard = [
+        [{"text": "💬 練習回覆留言", "callback_data": "social_practice"}],
+        [{"text": "✍️ 生成銷售內容", "callback_data": "social_content"}],
+    ]
+    send_telegram("📱 Social Media 銷售訓練\n\n揀你想做咩：", reply_markup={"inline_keyboard": keyboard})
+
+
+def handle_social_platform_menu():
+    keyboard = [[{"text": p, "callback_data": f"social_platform_{p}"} for p in SOCIAL_PLATFORMS]]
+    send_telegram("揀平台：", reply_markup={"inline_keyboard": keyboard})
+
+
+def handle_social_content_menu():
+    keyboard = [[{"text": c, "callback_data": f"social_ct_{c}"}] for c in SOCIAL_CONTENT_TYPES]
+    send_telegram("揀內容類型：", reply_markup={"inline_keyboard": keyboard})
+
+
+def run_social_scenario(platform: str):
+    profile = load_profile()
+    display, scenario = generate_social_scenario(platform, profile)
+    save_session({"state": "waiting_social_response", "scenario": scenario})
+    send_telegram(display)
+
+
+def handle_social_response(user_text: str):
+    session = load_session()
+    if not session or session.get("state") != "waiting_social_response":
+        send_telegram("唔係 social 練習模式。用 /social 開始！")
+        return
+    clear_session()
+    scenario = session["scenario"]
+    send_telegram("🤔 AI 評估緊你嘅回覆，稍等⋯⋯")
+    feedback = evaluate_social_response(user_text, scenario)
+    platform = scenario.get("platform", "")
+    replay_kb = {"inline_keyboard": [[
+        {"text": "🔄 再練一個", "callback_data": f"social_platform_{platform}"},
+        {"text": "📱 換平台",   "callback_data": "social_practice"},
+    ]]}
+    send_telegram(feedback, reply_markup=replay_kb)
+
+
+def run_social_content(content_type: str):
+    profile = load_profile()
+    send_telegram(f"✍️ 生成「{content_type}」緊，稍等⋯⋯")
+    result = generate_social_content(content_type, profile)
+    replay_kb = {"inline_keyboard": [[{"text": "✍️ 生成其他內容", "callback_data": "social_content"}]]}
+    send_telegram(result, reply_markup=replay_kb)
 
 
 # ── 練習 Session ──────────────────────────────────────────────────
@@ -391,6 +448,24 @@ def handle_callback(cb: dict):
         answer_callback(cb["id"])
         handle_stats()
 
+    elif data == "social_practice":
+        answer_callback(cb["id"])
+        handle_social_platform_menu()
+
+    elif data == "social_content":
+        answer_callback(cb["id"])
+        handle_social_content_menu()
+
+    elif data.startswith("social_platform_"):
+        platform = data[len("social_platform_"):]
+        answer_callback(cb["id"], f"生成 {platform} 場景⋯⋯")
+        threading.Thread(target=run_social_scenario, args=(platform,), daemon=True).start()
+
+    elif data.startswith("social_ct_"):
+        content_type = data[len("social_ct_"):]
+        answer_callback(cb["id"])
+        threading.Thread(target=run_social_content, args=(content_type,), daemon=True).start()
+
     elif data.startswith("strategy_"):
         strategy_key = data[len("strategy_"):]
         answer_callback(cb["id"], "評估緊⋯⋯" if strategy_key != "freetext" else "自由輸入模式")
@@ -456,6 +531,18 @@ def handle_message(text: str):
 
     # 練習 session 中：非指令訊息 = 用戶回應
     session = load_session()
+    if session and session.get("state") == "waiting_social_response" and not text.startswith("/"):
+        threading.Thread(target=handle_social_response, args=(text,), daemon=True).start()
+        return
+    if session and session.get("state") == "waiting_review" and not text.startswith("/"):
+        clear_session()
+        profile = load_profile()
+        send_telegram("🔍 AI 分析緊你嘅對話，稍等⋯⋯")
+        threading.Thread(
+            target=lambda: send_telegram(analyze_conversation(text, profile)),
+            daemon=True,
+        ).start()
+        return
     if session and session.get("state") in ("waiting_response", "waiting_strategy") and not text.startswith("/"):
         log.info(f"練習回應: {text[:60]!r}")
         # waiting_strategy 狀態下直接打字，視作自由輸入回應
@@ -480,10 +567,12 @@ def handle_message(text: str):
             "/practice — 隨機練習一個場景\n"
             "/practice 初級／中級／高級 — 指定難度\n"
             "/drill — 針對特定拒絕類型\n"
+            "/social — 社交媒體回覆練習 / 生成內容\n"
+            "/review — 貼真實對話，AI 分析失分點\n"
             "/stats — 查看進度報告\n"
             "/streak — 練習連續天數\n"
             "/tip — 今日銷售技巧\n"
-            "/setup — 更改我的背景設定\n\n"
+            "/setup — 更改背景設定\n\n"
             "💡 每日練習 5 分鐘，90 日後成交率會嚇親自己"
         )
         return
@@ -510,6 +599,15 @@ def handle_message(text: str):
             kwargs={"difficulty": diff},
             daemon=True,
         ).start()
+        return
+
+    if cmd(text, "/social"):
+        handle_social_menu()
+        return
+
+    if cmd(text, "/review"):
+        save_session({"state": "waiting_review"})
+        send_telegram("📋 貼上你嘅真實銷售對話（客戶同你嘅對話記錄），AI 幫你分析失分點同改善話術：")
         return
 
     if cmd(text, "/drill"):
