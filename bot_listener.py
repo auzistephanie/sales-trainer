@@ -61,7 +61,8 @@ def register_commands():
         {"command": "stats",    "description": "查看進度報告"},
         {"command": "streak",   "description": "練習連續天數"},
         {"command": "tip",      "description": "今日銷售技巧"},
-        {"command": "help",     "description": "指令說明"},
+        {"command": "help",      "description": "指令說明"},
+        {"command": "mystatus", "description": "查看目前設定"},
     ]
     requests.post(
         f"https://api.telegram.org/bot{token}/setMyCommands",
@@ -444,6 +445,20 @@ def handle_message(text: str):
 
     if cmd(text, "/tip"):
         handle_tip()
+        return
+
+    if cmd(text, "/mystatus"):
+        stats    = load_stats()
+        industry = stats.get("preferred_industry", "未設定")
+        total    = stats.get("total_sessions", 0)
+        streak   = stats.get("streak", {}).get("count", 0)
+        send_telegram(
+            f"⚙️ 我的設定\n\n"
+            f"🏭 偏好行業：{industry}\n"
+            f"📊 總練習次數：{total}\n"
+            f"🔥 連續天數：{streak}\n\n"
+            f"換行業：用 /practice 然後撳「🔄 換行業」"
+        )
         return
 
 
