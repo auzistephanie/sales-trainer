@@ -251,10 +251,12 @@ def handle_message(text):
 @app.route("/api/webhook",methods=["POST"])
 def webhook():
     update=request.json or {}
-    if "callback_query" in update: handle_callback(update["callback_query"])
-    elif "message" in update:
-        text=update["message"].get("text","").strip()
-        if text: handle_message(text)
+    def process():
+        if "callback_query" in update: handle_callback(update["callback_query"])
+        elif "message" in update:
+            text=update["message"].get("text","").strip()
+            if text: handle_message(text)
+    threading.Thread(target=process,daemon=True).start()
     return jsonify({"ok":True})
 
 @app.route("/",methods=["GET"])
