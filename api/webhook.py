@@ -204,46 +204,38 @@ def handle_drill_menu():
 def handle_callback(cb):
     answer_cb(cb["id"]); data=cb.get("data","")
     if data=="main_menu": _send_main_menu(load_profile()); return
-    if data=="setup_start": threading.Thread(target=handle_setup_start,daemon=True).start(); return
-    if data.startswith("setup_industry_"):
-        threading.Thread(target=handle_setup_industry,args=(data[len("setup_industry_"):],),daemon=True).start(); return
-    if data=="practice_new": threading.Thread(target=start_practice,daemon=True).start(); return
-    if data.startswith("drill_"):
-        threading.Thread(target=start_practice,kwargs={"force_objection":data[6:]},daemon=True).start(); return
+    if data=="setup_start": handle_setup_start(); return
+    if data.startswith("setup_industry_"): handle_setup_industry(data[len("setup_industry_"):]); return
+    if data=="practice_new": start_practice(); return
+    if data.startswith("drill_"): start_practice(force_objection=data[6:]); return
     if data=="review_start": handle_review_start(); return
     if data=="social_menu": handle_social_menu(); return
     if data=="social_practice_menu": handle_social_practice_menu(); return
     if data=="social_generate_menu": handle_social_generate_menu(); return
-    if data.startswith("social_platform_"):
-        threading.Thread(target=start_social_practice,args=(data[len("social_platform_"):],),daemon=True).start(); return
-    if data.startswith("social_generate_"):
-        threading.Thread(target=do_generate_content,args=(data[len("social_generate_"):],),daemon=True).start(); return
-    if data=="show_stats": threading.Thread(target=handle_stats,daemon=True).start(); return
-    if data=="show_tip": threading.Thread(target=handle_tip,daemon=True).start(); return
+    if data.startswith("social_platform_"): start_social_practice(data[len("social_platform_"):]); return
+    if data.startswith("social_generate_"): do_generate_content(data[len("social_generate_"):]); return
+    if data=="show_stats": handle_stats(); return
+    if data=="show_tip": handle_tip(); return
 
 def handle_message(text):
     setup_sess=load_setup_session()
     if setup_sess.get("step") in ("industry_custom","company") and not text.startswith("/"):
-        threading.Thread(target=handle_setup_text,args=(text,),daemon=True).start(); return
+        handle_setup_text(text); return
     session=load_session(); state=session.get("state","") if session else ""
-    if state=="waiting_response" and not text.startswith("/"):
-        threading.Thread(target=handle_user_response,args=(text,),daemon=True).start(); return
-    if state=="waiting_review" and not text.startswith("/"):
-        clear_session(); threading.Thread(target=handle_review_text,args=(text,),daemon=True).start(); return
-    if state=="waiting_social_response" and not text.startswith("/"):
-        threading.Thread(target=handle_social_response,args=(text,),daemon=True).start(); return
+    if state=="waiting_response" and not text.startswith("/"): handle_user_response(text); return
+    if state=="waiting_review" and not text.startswith("/"): clear_session(); handle_review_text(text); return
+    if state=="waiting_social_response" and not text.startswith("/"): handle_social_response(text); return
     if cmd(text,"/start") or cmd(text,"/help"): handle_start(); return
-    if cmd(text,"/setup"): threading.Thread(target=handle_setup_start,daemon=True).start(); return
+    if cmd(text,"/setup"): handle_setup_start(); return
     if cmd(text,"/practice"):
         parts=text.split(maxsplit=1); extra=parts[1].strip() if len(parts)>1 else None
         diff=extra if extra in DIFFICULTY_LEVELS else None; ind=extra if extra and extra not in DIFFICULTY_LEVELS else None
-        send_telegram("🎯 生成練習場景⋯⋯")
-        threading.Thread(target=start_practice,kwargs={"force_industry":ind,"difficulty":diff},daemon=True).start(); return
+        start_practice(force_industry=ind,difficulty=diff); return
     if cmd(text,"/drill"): handle_drill_menu(); return
     if cmd(text,"/review"): handle_review_start(); return
     if cmd(text,"/social"): handle_social_menu(); return
-    if cmd(text,"/stats"): threading.Thread(target=handle_stats,daemon=True).start(); return
-    if cmd(text,"/tip"): threading.Thread(target=handle_tip,daemon=True).start(); return
+    if cmd(text,"/stats"): handle_stats(); return
+    if cmd(text,"/tip"): handle_tip(); return
     profile=load_profile()
     if not profile: handle_start(); return
     _send_main_menu(profile)
@@ -251,12 +243,10 @@ def handle_message(text):
 @app.route("/api/webhook",methods=["POST"])
 def webhook():
     update=request.json or {}
-    def process():
-        if "callback_query" in update: handle_callback(update["callback_query"])
-        elif "message" in update:
-            text=update["message"].get("text","").strip()
-            if text: handle_message(text)
-    threading.Thread(target=process,daemon=True).start()
+    if "callback_query" in update: handle_callback(update["callback_query"])
+    elif "message" in update:
+        text=update["message"].get("text","").strip()
+        if text: handle_message(text)
     return jsonify({"ok":True})
 
 @app.route("/",methods=["GET"])
