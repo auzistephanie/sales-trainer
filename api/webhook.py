@@ -21,6 +21,12 @@ from utils import (
     load_profile, save_profile,
     load_setup_session, save_setup_session, clear_setup_session,
     send_telegram, set_current_chat_id,
+    _redis_get, _redis_set, _redis_del,
+)
+from mbti_checker import (
+    MBTI_QUESTIONS, MBTI_QUICK_DESC,
+    validate_mbti, format_mbti_list, calculate_mbti,
+    mbti_question_keyboard, mbti_question_text, mbti_result_text,
 )
 
 app = Flask(__name__)
@@ -236,6 +242,109 @@ def handle_user_response(user_text):
     ]})
 
 
+# ── MBTI Check Session ────────────────────────────────────────────
+_MBTI_KEY = "mbti_check_session"
+
+def load_mbti_session():   return _redis_get(_MBTI_KEY) or {}
+def save_mbti_session(d):  _redis_set(_MBTI_KEY, d, ex=900)   # 15 min TTL
+def clear_mbti_session():  _redis_del(_MBTI_KEY)
+
+
+def start_mbti_check():
+    """開始 MBTI 20題檢測。"""
+    save_mbti_session({"step": 0, "answers": []})
+    send_telegram(
+        "🔍 *MBTI 檢測（20條問題，約5分鐘）*\n\n"
+        "每個維度 5 條問題，參考 16personalities 設計。\n"
+        "直接撳按鈕揀 A 或 B 就得！\n\n"
+        f"{mbti_question_text(0)}",
+        reply_markup=mbti_question_keyboard(0),
+    )
+
+
+def handle_mbti_answer(step: int, answer: str):
+    """處理一個 MBTI 答案，繼續或顯示結果。"""
+    sess    = load_mbti_session()
+    answers = sess.get("answers", [])
+
+    # 防止重複或亂序
+    if len(answers) != step:
+        send_telegram("⚠️ 出咗問題，用 /mbti 重新開始。")
+        clear_mbti_session()
+        return
+
+    answers.append(answer)
+    next_step = step + 1
+
+    if next_step >= len(MBTI_QUESTIONS):
+        # 完成 — 計算結果
+        clear_mbti_session()
+        result = calculate_mbti(answers)
+        if not result:
+            send_telegram("❌ 計算出錯，請用 /mbti 重新開始。")
+            return
+
+        # 儲存 MBTI 入 profile
+        profile = load_profile()
+        profile["mbti"] = result["mbti"]
+        save_profile(profile)
+
+        send_telegram(
+            mbti_result_text(result),
+            reply_markup={"inline_keyboard": [[
+                {"text": "🎯 開始面試練習", "callback_data": "practice_new"},
+                {"text": "⚙️ 睇我嘅設定",  "callback_data": "show_mystatus"},
+            ]]}
+        )
+    else:
+        save_mbti_session({"step": next_step, "answers": answers})
+        send_telegram(
+            mbti_question_text(next_step),
+            reply_markup=mbti_question_keyboard(next_step),
+        )
+
+
+def cmd_mbti(text: str):
+    """處理 /mbti 指令。"""
+    parts = text.strip().split()
+    if len(parts) > 1:
+        # 直接輸入：/mbti INTJ
+        mbti = parts[1].upper()
+        if validate_mbti(mbti):
+            profile = load_profile()
+            profile["mbti"] = mbti
+            save_profile(profile)
+            coaching = MBTI_COACHING.get(mbti, {})
+            note = f"\n\n💡 面試盲點：{coaching['watch_out']}" if coaching else ""
+            send_telegram(
+                f"✅ 已儲存 MBTI：*{mbti}* — {MBTI_QUICK_DESC.get(mbti, '')}{note}",
+                reply_markup={"inline_keyboard": [[
+                    {"text": "🎯 開始練習", "callback_data": "practice_new"},
+                ]]}
+            )
+        else:
+            send_telegram(
+                f"❌ 唔識 `{mbti}`，請輸入以下 16 種之一：\n\n{format_mbti_list()}\n\n"
+                f"例如：`/mbti INTJ`\n\n或者打 `/mbti` 開始 20 題檢測。"
+            )
+    else:
+        # 開始檢測
+        send_telegram(
+            "📝 *點樣設定 MBTI？*\n\n"
+            "*方法 1：做20題快速檢測*（推薦，約5分鐘）\n"
+            "*方法 2：直接輸入*（如果你已知自己嘅 MBTI）\n"
+            "例如：`/mbti INTJ`\n\n"
+            "*方法 3：做官方測試*\n"
+            "去 [16personalities.com](https://www.16personalities.com/ch)（約10分鐘）\n"
+            "做完後用方法 2 輸入結果",
+            reply_markup={"inline_keyboard": [
+                [{"text": "🔍 開始20題檢測", "callback_data": "mbti_start"}],
+                [{"text": "🌐 去 16personalities", "url": "https://www.16personalities.com/ch"}],
+            ]}
+        )
+
+
+# ── Drill ─────────────────────────────────────────────────────────
 def handle_drill_menu():
     kb = []
     row = []
@@ -299,6 +408,38 @@ def handle_callback(cb):
         else:
             clear_setup_session()
             send_setup_done(profile)
+
+    elif data == "mbti_start":
+        start_mbti_check()
+
+    elif data.startswith("mbti_ans_"):
+        # mbti_ans_{step}_{A|B}
+        parts = data.split("_")
+        step_i = int(parts[2])
+        ans    = parts[3]
+        handle_mbti_answer(step_i, ans)
+
+    elif data == "show_mystatus":
+        # inline 版 mystatus
+        profile = load_profile() or {}
+        data2   = load_stats()
+        total   = data2.get("total_sessions", 0)
+        streak  = data2.get("streak", {}).get("count", 0)
+        mbti    = profile.get("mbti", "未設定")
+        note    = ""
+        if profile.get("mbti") and profile["mbti"] in MBTI_COACHING:
+            note = f"\n💡 盲點：{MBTI_COACHING[profile['mbti']]['watch_out']}"
+        send_telegram(
+            f"⚙️ 我的設定\n\n"
+            f"🎯 目標職位：{profile.get('job_title','未設定')}\n"
+            f"🏭 行業：{profile.get('industry','未設定')}\n"
+            f"🧠 MBTI：{mbti}{note}\n\n"
+            f"📊 總練習：{total} 次  🔥 連續：{streak} 日",
+            reply_markup={"inline_keyboard": [[
+                {"text": "🎯 開始練習", "callback_data": "practice_new"},
+                {"text": "🔍 重做 MBTI", "callback_data": "mbti_start"},
+            ]]}
+        )
 
     elif data.startswith("drill_"):
         qtype_name = data[6:]
@@ -417,6 +558,10 @@ def handle_message(text):
         )
         return
 
+    if cmd(text, "/mbti"):
+        cmd_mbti(text)
+        return
+
     if cmd(text, "/stats"):
         handle_stats()
         return
@@ -511,6 +656,7 @@ def set_webhook():
         {"command": "streak",   "description": "練習連續天數"},
         {"command": "tip",      "description": "今日面試技巧"},
         {"command": "review",   "description": "貼真實面試答案，AI 分析"},
+        {"command": "mbti",     "description": "做 MBTI 檢測 / 直接輸入 MBTI"},
         {"command": "setup",    "description": "設定目標職位 + MBTI"},
         {"command": "mystatus", "description": "查看我的設定"},
         {"command": "help",     "description": "指令說明"},
