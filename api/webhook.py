@@ -20,7 +20,7 @@ from utils import (
     load_session, save_session, clear_session,
     load_profile, save_profile,
     load_setup_session, save_setup_session, clear_setup_session,
-    send_telegram,
+    send_telegram, set_current_chat_id,
 )
 
 app = Flask(__name__)
@@ -474,26 +474,58 @@ def handle_message(text):
 @app.route("/api/webhook", methods=["POST"])
 def webhook():
     update = request.json or {}
+
+    # 抽取 chat_id，令 send_telegram 知道發去邊
     if "callback_query" in update:
+        chat_id = update["callback_query"]["message"]["chat"]["id"]
+        set_current_chat_id(chat_id)
         handle_callback(update["callback_query"])
     elif "message" in update:
+        chat_id = update["message"]["chat"]["id"]
+        set_current_chat_id(chat_id)
         text = update["message"].get("text", "").strip()
         if text:
             handle_message(text)
+
     return jsonify({"ok": True})
 
 
 @app.route("/api/set_webhook", methods=["GET"])
 def set_webhook():
-    """部署後訪問呢個 URL 自動設定 Telegram webhook。"""
+    """部署後訪問呢個 URL — 自動設定 webhook + 更新指令清單。"""
     host = request.host_url.rstrip("/")
     url  = f"{host}/api/webhook"
-    resp = req.post(
+
+    # 1. 設定 webhook
+    wh_resp = req.post(
         f"https://api.telegram.org/bot{TOKEN()}/setWebhook",
         json={"url": url, "allowed_updates": ["message", "callback_query"]},
         timeout=10,
-    )
-    return jsonify({"webhook_url": url, "telegram_response": resp.json()})
+    ).json()
+
+    # 2. 更新 Telegram 指令清單
+    commands = [
+        {"command": "practice", "description": "隨機面試練習"},
+        {"command": "drill",    "description": "針對特定題型練習"},
+        {"command": "stats",    "description": "我的進度報告"},
+        {"command": "streak",   "description": "練習連續天數"},
+        {"command": "tip",      "description": "今日面試技巧"},
+        {"command": "review",   "description": "貼真實面試答案，AI 分析"},
+        {"command": "setup",    "description": "設定目標職位 + MBTI"},
+        {"command": "mystatus", "description": "查看我的設定"},
+        {"command": "help",     "description": "指令說明"},
+    ]
+    cmd_resp = req.post(
+        f"https://api.telegram.org/bot{TOKEN()}/setMyCommands",
+        json={"commands": commands},
+        timeout=10,
+    ).json()
+
+    return jsonify({
+        "webhook_url": url,
+        "webhook": wh_resp,
+        "commands": cmd_resp,
+    })
 
 
 @app.route("/", methods=["GET"])
