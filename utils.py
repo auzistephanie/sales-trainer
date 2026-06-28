@@ -9,9 +9,16 @@ import json as _json
 BASE_DIR = Path(__file__).parent
 load_dotenv(BASE_DIR / ".env")
 
-_STATS_KEY   = "sales_stats"
-_SESSION_KEY = "sales_session"
-_RECENT_KEY  = "sales_recent_dna"
+_STATS_KEY   = "interview_stats"
+_SESSION_KEY = "interview_session"
+_RECENT_KEY  = "interview_recent_dna"
+
+# 動態 chat_id（webhook 每次 request 開頭設定）
+_current_chat_id: str | None = None
+
+def set_current_chat_id(chat_id):
+    global _current_chat_id
+    _current_chat_id = str(chat_id)
 
 
 def _redis_url():
@@ -44,7 +51,7 @@ def _redis_del(key: str):
 # ── Stats ─────────────────────────────────────────────────────────
 
 def load_stats() -> dict:
-    return _redis_get(_STATS_KEY) or {"objection_scores":{},"total_sessions":0,"streak":{"last_date":"","count":0}}
+    return _redis_get(_STATS_KEY) or {"qtype_scores": {}, "total_sessions": 0, "streak": {"last_date": "", "count": 0}}
 
 def save_stats(data: dict): _redis_set(_STATS_KEY, data)
 
@@ -64,12 +71,12 @@ def save_recent_dna(data: dict): _redis_set(_RECENT_KEY, data)
 
 # ── Profile / Setup Session ───────────────────────────────────────
 
-def load_profile() -> dict: return _redis_get("sales_profile") or {}
-def save_profile(data: dict): _redis_set("sales_profile", data)
+def load_profile() -> dict: return _redis_get("interview_profile") or {}
+def save_profile(data: dict): _redis_set("interview_profile", data)
 
-def load_setup_session() -> dict: return _redis_get("sales_setup_session") or {}
-def save_setup_session(data: dict): _redis_set("sales_setup_session", data, ex=600)
-def clear_setup_session(): _redis_del("sales_setup_session")
+def load_setup_session() -> dict: return _redis_get("interview_setup_session") or {}
+def save_setup_session(data: dict): _redis_set("interview_setup_session", data, ex=600)
+def clear_setup_session(): _redis_del("interview_setup_session")
 
 
 # ── Telegram ──────────────────────────────────────────────────────
@@ -86,17 +93,27 @@ def _split_text(text: str, max_len: int = 4000) -> list:
     return chunks
 
 def send_telegram(text: str, reply_markup=None, max_retries: int = 3):
-    token = os.getenv("TELEGRAM_BOT_TOKEN"); chat_id = os.getenv("TELEGRAM_CHAT_ID")
-    if not token or not chat_id: print("Telegram 設定缺失"); return
-    url = f"https://api.telegram.org/bot{token}/sendMessage"
+    token   = os.getenv("TELEGRAM_BOT_TOKEN")
+    # 優先用動態 chat_id（webhook），fallback 去 env var（本地 polling）
+    chat_id = _current_chat_id or os.getenv("TELEGRAM_CHAT_ID")
+    if not token or not chat_id:
+        print(f"Telegram 設定缺失 token={bool(token)} chat_id={chat_id}")
+        return
+    url    = f"https://api.telegram.org/bot{token}/sendMessage"
     chunks = _split_text(text)
     for idx, chunk in enumerate(chunks):
-        payload = {"chat_id": chat_id, "text": chunk}
-        if reply_markup and idx == len(chunks) - 1: payload["reply_markup"] = reply_markup
+        payload = {"chat_id": chat_id, "text": chunk, "parse_mode": "Markdown"}
+        if reply_markup and idx == len(chunks) - 1:
+            payload["reply_markup"] = reply_markup
         for attempt in range(1, max_retries + 1):
             try:
                 resp = requests.post(url, json=payload, timeout=15)
                 if resp.ok: break
-                print(f"Telegram 失敗（第{attempt}次）: {resp.status_code}")
+                # Markdown 解析錯誤時 fallback 純文字
+                if resp.status_code == 400:
+                    payload.pop("parse_mode", None)
+                    resp2 = requests.post(url, json=payload, timeout=15)
+                    if resp2.ok: break
+                print(f"Telegram 失敗（第{attempt}次）: {resp.status_code} {resp.text[:100]}")
             except requests.RequestException as e:
                 print(f"Telegram 異常（第{attempt}次）: {e}")
