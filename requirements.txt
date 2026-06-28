@@ -3,3 +3,5 @@ requests
 python-dotenv
 flask
 upstash-redis
+pdfplumber
+python-docx
