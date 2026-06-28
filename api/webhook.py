@@ -13,7 +13,7 @@ from datetime import datetime, timedelta
 from interview_trainer import (
     generate_scenario, evaluate_response, analyze_conversation,
     QUESTION_TYPES, INDUSTRIES, DIFFICULTY_LEVELS, MBTI_COACHING,
-    get_daily_tip,
+    get_daily_tip, parse_resume,
 )
 from utils import (
     load_stats, save_stats,
@@ -344,6 +344,93 @@ def cmd_mbti(text: str):
         )
 
 
+# ── Resume Parser ────────────────────────────────────────────────
+
+def handle_document(document: dict):
+    """處理用戶上傳嘅 resume（PDF / DOCX）。"""
+    mime  = document.get("mime_type", "")
+    fname = document.get("file_name", "").lower()
+
+    is_pdf  = mime == "application/pdf" or fname.endswith(".pdf")
+    is_docx = mime == "application/vnd.openxmlformats-officedocument.wordprocessingml.document" \
+              or fname.endswith(".docx")
+
+    if not is_pdf and not is_docx:
+        send_telegram("⚠️ 請上傳 PDF 或 Word (.docx) 格式嘅 resume。")
+        return
+
+    send_telegram("📄 收到 resume！AI 分析緊，稍等⋯⋯")
+
+    # 1. 取得下載 URL
+    file_info = req.get(
+        f"https://api.telegram.org/bot{TOKEN()}/getFile",
+        params={"file_id": document["file_id"]}, timeout=10,
+    ).json()
+    if not file_info.get("ok"):
+        send_telegram("❌ 下載失敗，請重試。")
+        return
+
+    file_url  = f"https://api.telegram.org/file/bot{TOKEN()}/{file_info['result']['file_path']}"
+    file_bytes = req.get(file_url, timeout=30).content
+
+    # 2. 提取文字
+    resume_text = ""
+    try:
+        if is_pdf:
+            import pdfplumber, io
+            with pdfplumber.open(io.BytesIO(file_bytes)) as pdf:
+                resume_text = "\n".join(p.extract_text() or "" for p in pdf.pages)
+        else:
+            import docx, io
+            doc = docx.Document(io.BytesIO(file_bytes))
+            resume_text = "\n".join(p.text for p in doc.paragraphs if p.text.strip())
+    except Exception as e:
+        send_telegram(f"❌ 解析文件失敗：{e}\n請確保唔係掃描版圖片 PDF。")
+        return
+
+    if not resume_text.strip():
+        send_telegram("⚠️ 未能提取文字，可能係掃描版 PDF。請試用文字版 PDF 或 .docx。")
+        return
+
+    # 3. AI 分析
+    parsed = parse_resume(resume_text)
+    if not parsed:
+        send_telegram("❌ AI 分析失敗，請重試。")
+        return
+
+    # 4. 更新 profile
+    profile = load_profile() or {}
+    if parsed.get("job_title"):       profile["job_title"] = parsed["job_title"]
+    if parsed.get("industry"):        profile["industry"]  = parsed["industry"]
+    if parsed.get("exp_years"):       profile["exp_years"] = str(parsed["exp_years"])
+    if parsed.get("current_company"): profile["company"]   = parsed["current_company"]
+    if parsed.get("key_skills"):      profile["key_skills"] = parsed["key_skills"]
+    if parsed.get("education"):       profile["education"]  = parsed["education"]
+    save_profile(profile)
+
+    # 5. 回覆確認
+    lines = [
+        "✅ *Resume 分析完成！*\n",
+        f"📝 {parsed.get('summary', '')}",
+        "",
+        f"🎯 職位：{parsed.get('job_title', '未識別')}",
+        f"🏭 行業：{parsed.get('industry', '未識別')}",
+        f"⏱️ 年資：{parsed.get('exp_years', '?')} 年",
+    ]
+    if parsed.get("current_company"): lines.append(f"🏢 公司：{parsed['current_company']}")
+    if parsed.get("key_skills"):      lines.append(f"🛠️ 技能：{parsed['key_skills']}")
+    if parsed.get("education"):       lines.append(f"🎓 學歷：{parsed['education']}")
+    lines.append("\n面試練習會根據你嘅背景個人化！")
+
+    send_telegram(
+        "\n".join(lines),
+        reply_markup={"inline_keyboard": [[
+            {"text": "🎯 立即練習", "callback_data": "practice_new"},
+            {"text": "⚙️ 修改設定",  "callback_data": "setup_start"},
+        ]]}
+    )
+
+
 # ── Drill ─────────────────────────────────────────────────────────
 def handle_drill_menu():
     kb = []
@@ -525,6 +612,7 @@ def handle_message(text):
             "/tip — 今日面試技巧\n"
             "/setup — 更改設定\n"
             "/mystatus — 我的設定\n\n"
+            "📄 上傳 PDF / DOCX resume — AI 自動分析並個人化練習\n\n"
             "💡 每日練習 10 分鐘，面試表現明顯提升"
         )
         return
@@ -628,8 +716,11 @@ def webhook():
     elif "message" in update:
         chat_id = update["message"]["chat"]["id"]
         set_current_chat_id(chat_id)
-        text = update["message"].get("text", "").strip()
-        if text:
+        document = update["message"].get("document")
+        text     = update["message"].get("text", "").strip()
+        if document:
+            handle_document(document)
+        elif text:
             handle_message(text)
 
     return jsonify({"ok": True})
@@ -659,7 +750,7 @@ def set_webhook():
         {"command": "mbti",     "description": "做 MBTI 檢測 / 直接輸入 MBTI"},
         {"command": "setup",    "description": "設定目標職位 + MBTI"},
         {"command": "mystatus", "description": "查看我的設定"},
-        {"command": "help",     "description": "指令說明"},
+        {"command": "help",     "description": "指令說明（提示：可直接上傳 PDF resume）"},
     ]
     cmd_resp = req.post(
         f"https://api.telegram.org/bot{TOKEN()}/setMyCommands",
