@@ -1,4 +1,4 @@
-"""銷售話術訓練 Bot — Telegram 對話管理、指令路由、進度追蹤。"""
+"""AI 面試教練 Bot — Telegram 對話管理、指令路由、進度追蹤。"""
 
 import logging
 import logging.handlers
@@ -31,12 +31,10 @@ logging.basicConfig(
 )
 log = logging.getLogger(__name__)
 
-from sales_trainer import (
-    generate_scenario, evaluate_response, evaluate_strategy,
-    generate_social_scenario, evaluate_social_response, generate_social_content,
-    analyze_conversation,
-    OBJECTION_TYPES, INDUSTRIES, DIFFICULTY_LEVELS, STRATEGIES,
-    SOCIAL_PLATFORMS, SOCIAL_CONTENT_TYPES,
+from interview_trainer import (
+    generate_scenario, evaluate_response, analyze_conversation,
+    QUESTION_TYPES, INDUSTRIES, DIFFICULTY_LEVELS, MBTI_COACHING,
+    get_daily_tip,
 )
 from utils import (
     load_stats, save_stats,
@@ -44,6 +42,15 @@ from utils import (
     load_profile, save_profile,
     load_setup_session, save_setup_session, clear_setup_session,
     send_telegram,
+)
+
+# ── 免費 session 上限 ──────────────────────────────────────────────
+FREE_SESSION_LIMIT = 5
+UPGRADE_MSG = (
+    "🎓 你已完成 {n} 次免費練習！\n\n"
+    "升級 Premium 解鎖無限練習 + 詳細進度分析：\n"
+    "👉 [加入等候名單](https://t.me/hkinterviewbot)（暫定 $68/月）\n\n"
+    "或者繼續試用，每日送 1 次額外練習 🎁"
 )
 
 
@@ -61,16 +68,15 @@ def answer_callback(cb_id: str, text: str = ""):
 def register_commands():
     token = os.getenv("TELEGRAM_BOT_TOKEN")
     commands = [
-        {"command": "practice", "description": "隨機練習一個場景"},
-        {"command": "drill",    "description": "針對特定拒絕類型練習"},
-        {"command": "stats",    "description": "查看進度報告"},
+        {"command": "practice", "description": "隨機面試練習"},
+        {"command": "drill",    "description": "針對特定題型練習"},
+        {"command": "stats",    "description": "我的進度報告"},
         {"command": "streak",   "description": "練習連續天數"},
-        {"command": "tip",      "description": "今日銷售技巧"},
-        {"command": "help",      "description": "指令說明"},
-        {"command": "mystatus", "description": "查看目前設定"},
-        {"command": "social",   "description": "社交媒體銷售練習 / 生成內容"},
-        {"command": "review",   "description": "貼真實對話，AI 分析失分點"},
-        {"command": "setup",    "description": "更改我的背景設定（行業／公司／產品）"},
+        {"command": "tip",      "description": "今日面試技巧"},
+        {"command": "review",   "description": "貼真實面試答案，AI 分析失分點"},
+        {"command": "setup",    "description": "設定我的目標職位 + MBTI"},
+        {"command": "mystatus", "description": "查看我的設定"},
+        {"command": "help",     "description": "指令說明"},
     ]
     requests.post(
         f"https://api.telegram.org/bot{token}/setMyCommands",
@@ -81,20 +87,19 @@ def register_commands():
 
 # ── 統計記錄 ──────────────────────────────────────────────────────
 
-def record_score(objection_name: str, score: int):
+def record_score(qtype_name: str, score: int):
     data    = load_stats()
-    scores  = data.setdefault("objection_scores", {})
-    history = scores.setdefault(objection_name, [])
+    scores  = data.setdefault("qtype_scores", {})
+    history = scores.setdefault(qtype_name, [])
     history.append(score)
-    scores[objection_name] = history[-20:]          # 保留最近 20 次
+    scores[qtype_name] = history[-20:]
     data["total_sessions"] = data.get("total_sessions", 0) + 1
 
-    # Streak 計算
     today     = datetime.now().strftime("%Y-%m-%d")
     yesterday = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
     streak    = data.setdefault("streak", {"last_date": "", "count": 0})
     if streak["last_date"] == today:
-        pass                                        # 同日唔重複計
+        pass
     elif streak["last_date"] == yesterday:
         streak["count"] += 1
         streak["last_date"] = today
@@ -107,11 +112,29 @@ def record_score(objection_name: str, score: int):
     return avg, len(history)
 
 
+def check_free_limit() -> bool:
+    """True = 可以繼續，False = 超出免費次數。"""
+    data  = load_stats()
+    total = data.get("total_sessions", 0)
+    # 每日免費 bonus：今日已免費練習 < 1
+    today_bonus = data.get("today_bonus_date") == datetime.now().strftime("%Y-%m-%d")
+    if total < FREE_SESSION_LIMIT or today_bonus:
+        return True
+    return False
+
+
+def use_daily_bonus():
+    """記錄今日已用免費 bonus。"""
+    data = load_stats()
+    data["today_bonus_date"] = datetime.now().strftime("%Y-%m-%d")
+    save_stats(data)
+
+
 # ── Stats 報告 ────────────────────────────────────────────────────
 
 def handle_stats():
     data   = load_stats()
-    scores = data.get("objection_scores", {})
+    scores = data.get("qtype_scores", {})
     total  = data.get("total_sessions", 0)
     streak = data.get("streak", {})
 
@@ -124,10 +147,15 @@ def handle_stats():
         key=lambda x: x[1], reverse=True
     )
 
+    profile = load_profile()
+    mbti_line = f"🧠 MBTI：{profile.get('mbti', '未設定')}  " if profile.get("mbti") else ""
+    job_line  = f"🎯 目標：{profile.get('job_title', '未設定')}" if profile.get("job_title") else ""
+
     lines = [
-        f"📊 我的銷售訓練進度",
+        "📊 我的面試訓練進度",
+        f"{mbti_line}{job_line}",
         f"總練習：{total} 次  |  連續 {streak.get('count', 0)} 日\n",
-        "【各拒絕類型掌握度】",
+        "【各題型掌握度】",
     ]
     for name, avg, count in ranked:
         filled = "█" * round(avg)
@@ -150,33 +178,43 @@ def handle_stats():
 # ── 今日技巧 ──────────────────────────────────────────────────────
 
 def handle_tip():
-    import random
-    obj = random.choice(OBJECTION_TYPES)
-    send_telegram(
-        f"💡 今日銷售技巧\n\n"
-        f"【處理「{obj['name']}」】\n\n"
-        f"{obj['tip']}\n\n"
-        f"想練習這個場景？用 /drill 揀「{obj['name']}」"
-    )
+    send_telegram(f"💡 今日面試技巧\n\n{get_daily_tip()}")
 
 
 # ── Profile Setup ─────────────────────────────────────────────────
 
-SETUP_INDUSTRIES = [
-    ("🛡️", "保險", "保險（人壽／醫療）"),
-    ("🏠", "地產", "地產代理"),
-    ("💰", "財務投資", "財務策劃／投資產品"),
-    ("💻", "B2B/SaaS", "B2B 服務／SaaS 軟件"),
-    ("📚", "培訓教育", "培訓課程／教育"),
-    ("🔗", "直銷/網絡", "直銷／網絡生意"),
+# 行業選單（14 種，每行 2 個）
+SETUP_INDUSTRY_LIST = [
+    ("💰", "金融/投行",    "金融／投資銀行"),
+    ("💻", "科技/IT",      "科技／軟件開發"),
+    ("📣", "市場/廣告",    "市場營銷／廣告"),
+    ("🧩", "管理諮詢",     "管理諮詢"),
+    ("🛍️", "零售/酒店",   "零售／酒店管理"),
+    ("🚀", "初創",         "初創公司"),
+    ("🏥", "醫療/健康科技", "醫療／藥劑／健康科技"),
+    ("⚖️", "法律/合規",   "法律／合規"),
+    ("👥", "人力資源",     "人力資源／招聘"),
+    ("📚", "教育/培訓",    "教育／培訓"),
+    ("🚚", "物流/供應鏈",  "物流／供應鏈"),
+    ("🏗️", "地產/建築",  "地產／建築工程"),
+    ("🎬", "傳媒/創意",   "傳媒／娛樂／創意"),
+    ("🏛️", "政府/NGO",   "政府／NGO／公共服務"),
+]
+
+# MBTI 選單（16 種，4×4）
+MBTI_LIST = [
+    "INTJ", "INTP", "ENTJ", "ENTP",
+    "INFJ", "INFP", "ENFJ", "ENFP",
+    "ISTJ", "ISFJ", "ESTJ", "ESFJ",
+    "ISTP", "ISFP", "ESTP", "ESFP",
 ]
 
 
 def handle_setup_start(intro: bool = True):
-    """Step 1：揀行業。intro=True 顯示歡迎語。"""
+    """Step 1：揀行業。"""
     keyboard = []
     row = []
-    for i, (icon, short, _) in enumerate(SETUP_INDUSTRIES):
+    for i, (icon, short, _) in enumerate(SETUP_INDUSTRY_LIST):
         row.append({"text": f"{icon} {short}", "callback_data": f"setup_ind_{i}"})
         if len(row) == 2:
             keyboard.append(row)
@@ -184,12 +222,27 @@ def handle_setup_start(intro: bool = True):
     if row:
         keyboard.append(row)
     keyboard.append([{"text": "✏️ 自定行業", "callback_data": "setup_ind_custom"}])
+
     msg = (
-        "👋 先設定你嘅 Sales 背景，令練習更貼近實際工作！\n\n🏭 你主要做邊個行業？"
+        "👋 歡迎使用 AI 面試教練！\n先設定你嘅背景，令練習更貼近你嘅情況。\n\n🏭 目標行業係？"
         if intro else
-        "🏭 揀你嘅行業："
+        "🏭 揀你嘅目標行業："
     )
     send_telegram(msg, reply_markup={"inline_keyboard": keyboard})
+
+
+def send_mbti_keyboard():
+    """顯示 MBTI 選擇鍵盤（4×4）。"""
+    keyboard = []
+    for i in range(0, 16, 4):
+        row = [{"text": t, "callback_data": f"setup_mbti_{t}"} for t in MBTI_LIST[i:i+4]]
+        keyboard.append(row)
+    keyboard.append([{"text": "⏭️ 唔知 / 跳過", "callback_data": "setup_mbti_skip"}])
+    send_telegram(
+        "🧠 你嘅 MBTI 係？（唔知可以跳過，之後 /setup 再改）\n"
+        "唔識做 MBTI 測試？👉 https://www.16personalities.com/ch",
+        reply_markup={"inline_keyboard": keyboard},
+    )
 
 
 # ── Drill 選單 ────────────────────────────────────────────────────
@@ -197,149 +250,37 @@ def handle_setup_start(intro: bool = True):
 def handle_drill_menu():
     keyboard = []
     row = []
-    for i, obj in enumerate(OBJECTION_TYPES):
-        row.append({"text": obj["name"], "callback_data": f"drill_{obj['name']}"})
+    for i, q in enumerate(QUESTION_TYPES):
+        row.append({"text": q["name"], "callback_data": f"drill_{q['name']}"})
         if len(row) == 2:
             keyboard.append(row)
             row = []
     if row:
         keyboard.append(row)
     keyboard.append([{"text": "🎲 隨機場景", "callback_data": "practice_new"}])
-    send_telegram("🎯 選擇你想針對練習的拒絕類型：", reply_markup={"inline_keyboard": keyboard})
-
-
-def handle_industry_menu(prompt_text: str = "🏭 揀你嘅行業："):
-    """顯示行業選擇 inline keyboard。"""
-    keyboard = []
-    row = []
-    icons = ["🛡️", "🏠", "💰", "💻", "📚", "🔗"]
-    short_names = ["保險", "地產", "財務投資", "B2B/SaaS", "培訓教育", "直銷/網絡"]
-    for i, (icon, short) in enumerate(zip(icons, short_names)):
-        row.append({"text": f"{icon} {short}", "callback_data": f"industry_pick_{i}"})
-        if len(row) == 2:
-            keyboard.append(row)
-            row = []
-    if row:
-        keyboard.append(row)
-    send_telegram(prompt_text, reply_markup={"inline_keyboard": keyboard})
-
-
-# ── Social 選單 ───────────────────────────────────────────────────
-
-def handle_social_menu():
-    keyboard = [
-        [{"text": "💬 練習回覆留言", "callback_data": "social_practice"}],
-        [{"text": "✍️ 生成銷售內容", "callback_data": "social_content"}],
-    ]
-    send_telegram("📱 Social Media 銷售訓練\n\n揀你想做咩：", reply_markup={"inline_keyboard": keyboard})
-
-
-def handle_social_platform_menu():
-    keyboard = [[{"text": p, "callback_data": f"social_platform_{p}"} for p in SOCIAL_PLATFORMS]]
-    send_telegram("揀平台：", reply_markup={"inline_keyboard": keyboard})
-
-
-def handle_social_content_menu():
-    keyboard = [[{"text": c, "callback_data": f"social_ct_{c}"}] for c in SOCIAL_CONTENT_TYPES]
-    send_telegram("揀內容類型：", reply_markup={"inline_keyboard": keyboard})
-
-
-def run_social_scenario(platform: str):
-    profile = load_profile()
-    display, scenario = generate_social_scenario(platform, profile)
-    save_session({"state": "waiting_social_response", "scenario": scenario})
-    send_telegram(display)
-
-
-def handle_social_response(user_text: str):
-    session = load_session()
-    if not session or session.get("state") != "waiting_social_response":
-        send_telegram("唔係 social 練習模式。用 /social 開始！")
-        return
-    clear_session()
-    scenario = session["scenario"]
-    send_telegram("🤔 AI 評估緊你嘅回覆，稍等⋯⋯")
-    feedback = evaluate_social_response(user_text, scenario)
-    platform = scenario.get("platform", "")
-    replay_kb = {"inline_keyboard": [[
-        {"text": "🔄 再練一個", "callback_data": f"social_platform_{platform}"},
-        {"text": "📱 換平台",   "callback_data": "social_practice"},
-    ]]}
-    send_telegram(feedback, reply_markup=replay_kb)
-
-
-def run_social_content(content_type: str):
-    profile = load_profile()
-    send_telegram(f"✍️ 生成「{content_type}」緊，稍等⋯⋯")
-    result = generate_social_content(content_type, profile)
-    replay_kb = {"inline_keyboard": [[{"text": "✍️ 生成其他內容", "callback_data": "social_content"}]]}
-    send_telegram(result, reply_markup=replay_kb)
+    send_telegram("🎯 選擇你想針對練習的題型：", reply_markup={"inline_keyboard": keyboard})
 
 
 # ── 練習 Session ──────────────────────────────────────────────────
 
-def build_strategy_keyboard():
-    """生成策略選擇 inline keyboard。"""
-    keyboard = []
-    row = []
-    for s in STRATEGIES:
-        row.append({"text": s["label"], "callback_data": f"strategy_{s['key']}"})
-        if len(row) == 2:
-            keyboard.append(row)
-            row = []
-    if row:
-        keyboard.append(row)
-    keyboard.append([{"text": "✏️ 自由輸入", "callback_data": "strategy_freetext"}])
-    return {"inline_keyboard": keyboard}
+def start_practice(force_qtype: str = None, force_industry: str = None, difficulty: str = None):
+    if not check_free_limit():
+        data  = load_stats()
+        total = data.get("total_sessions", 0)
+        kb = {"inline_keyboard": [[
+            {"text": "🎁 領取今日免費練習", "callback_data": "claim_bonus"},
+            {"text": "📊 睇進度",           "callback_data": "show_stats"},
+        ]]}
+        send_telegram(UPGRADE_MSG.format(n=total), reply_markup=kb)
+        return
 
-
-def start_practice(force_objection: str = None, force_industry: str = None, difficulty: str = None):
-    # 用 profile 行業（除非明確指定）
     if not force_industry:
         profile = load_profile()
         force_industry = profile.get("industry")
-    display, scenario = generate_scenario(force_objection, force_industry, difficulty)
-    save_session({"state": "waiting_strategy", "scenario": scenario})
-    send_telegram(display, reply_markup=build_strategy_keyboard())
 
-
-def handle_strategy_pick(strategy_key: str):
-    """處理用戶揀咗策略 button。"""
-    session = load_session()
-    if not session or session.get("state") not in ("waiting_strategy", "waiting_response"):
-        send_telegram("唔係練習模式。用 /practice 開始新練習！")
-        return
-
-    scenario = session["scenario"]
-    obj_name = scenario["objection"]["name"]
-    clear_session()
-
-    if strategy_key == "freetext":
-        # 切換到自由輸入模式
-        save_session({"state": "waiting_response", "scenario": scenario})
-        send_telegram("✏️ 好，直接打出你嘅回應 ⬇️")
-        return
-
-    send_telegram("🤔 AI 評估緊你嘅策略選擇，稍等⋯⋯")
-    feedback = evaluate_strategy(strategy_key, scenario, profile=load_profile())
-
-    # 解析分數
-    match = re.search(r"策略評估[：:]\s*([1-4])", feedback)
-    score = int(match.group(1)) if match else None
-    if score:
-        record_score(obj_name, score)
-
-    replay_kb = {"inline_keyboard": [
-        [
-            {"text": "🔄 再練一個",           "callback_data": "practice_new"},
-            {"text": f"🎯 再練「{obj_name}」", "callback_data": f"drill_{obj_name}"},
-        ],
-        [
-            {"text": "🏭 換行業",             "callback_data": "practice_change_industry"},
-            {"text": "📊 睇進度",             "callback_data": "show_stats"},
-        ],
-    ]}
-    send_telegram(feedback, reply_markup=replay_kb)
+    display, scenario = generate_scenario(force_qtype, force_industry, difficulty)
+    save_session({"state": "waiting_response", "scenario": scenario})
+    send_telegram(display)
 
 
 def handle_user_response(user_text: str):
@@ -349,26 +290,26 @@ def handle_user_response(user_text: str):
         return
 
     clear_session()
-    scenario = session["scenario"]
-    obj_name = scenario["objection"]["name"]
+    scenario  = session["scenario"]
+    qtype_name = scenario["qtype"]["name"]
 
-    send_telegram("🤔 AI 評估緊你嘅回應，稍等⋯⋯")
+    send_telegram("🤔 AI 評估緊你嘅回答，稍等⋯⋯")
     feedback = evaluate_response(user_text, scenario, profile=load_profile())
 
     # 解析分數
     match = re.search(r"評分[：:]\s*([1-4])", feedback)
     score = int(match.group(1)) if match else None
     if score:
-        record_score(obj_name, score)
+        record_score(qtype_name, score)
 
     replay_kb = {"inline_keyboard": [
         [
-            {"text": "🔄 再練一個",          "callback_data": "practice_new"},
-            {"text": f"🎯 再練「{obj_name}」", "callback_data": f"drill_{obj_name}"},
+            {"text": "🔄 再練一個",              "callback_data": "practice_new"},
+            {"text": f"🎯 再練「{qtype_name}」", "callback_data": f"drill_{qtype_name}"},
         ],
         [
-            {"text": "🏭 換行業",            "callback_data": "practice_change_industry"},
-            {"text": "📊 睇進度",            "callback_data": "show_stats"},
+            {"text": "📊 睇進度",               "callback_data": "show_stats"},
+            {"text": "💡 今日技巧",             "callback_data": "show_tip"},
         ],
     ]}
     send_telegram(feedback, reply_markup=replay_kb)
@@ -381,110 +322,88 @@ def handle_callback(cb: dict):
 
     if data == "practice_new":
         answer_callback(cb["id"], "生成新場景⋯⋯")
-        # 沿用偏好行業
-        stats = load_stats()
-        preferred = stats.get("preferred_industry")
-        threading.Thread(
-            target=start_practice,
-            kwargs={"force_industry": preferred},
-            daemon=True,
-        ).start()
+        threading.Thread(target=start_practice, daemon=True).start()
 
-    elif data == "setup_ind_custom":
+    elif data == "claim_bonus":
+        answer_callback(cb["id"], "🎁 今日免費練習已解鎖！")
+        use_daily_bonus()
+        threading.Thread(target=start_practice, daemon=True).start()
+
+    elif data == "show_stats":
         answer_callback(cb["id"])
-        save_setup_session({"state": "setup_industry_custom"})
-        send_telegram("✏️ 打出你嘅行業（例如：美容、網絡行銷、汽車）：")
+        handle_stats()
 
-    elif data.startswith("setup_ind_"):
-        idx = int(data[len("setup_ind_"):])
-        if idx < len(SETUP_INDUSTRIES):
-            _, _, full_name = SETUP_INDUSTRIES[idx]
-            profile = load_profile()
-            profile["industry"] = full_name
-            save_profile(profile)
-            stats = load_stats()
-            stats["preferred_industry"] = full_name
-            save_stats(stats)
-            answer_callback(cb["id"], f"✅ {full_name}")
-            save_setup_session({"state": "setup_company"})
-            send_telegram(f"✅ 行業：{full_name}\n\n🏢 你係邊間公司 / 機構做嘅？（直接打名）")
-        else:
-            answer_callback(cb["id"], "出錯，請再試")
+    elif data == "show_tip":
+        answer_callback(cb["id"])
+        handle_tip()
 
     elif data == "do_setup":
         answer_callback(cb["id"])
         clear_setup_session()
         handle_setup_start(intro=False)
 
-    elif data == "practice_change_industry":
+    # ── Setup：行業 ──
+    elif data == "setup_ind_custom":
         answer_callback(cb["id"])
-        handle_industry_menu("🔄 換行業——揀新嘅行業：")
+        save_setup_session({"state": "setup_industry_custom"})
+        send_telegram("✏️ 打出你嘅目標行業（例如：航空、網絡安全、遊戲）：")
 
-    elif data.startswith("industry_pick_"):
-        idx = int(data[len("industry_pick_"):])
-        industry_list = [
-            "保險（人壽／醫療）",
-            "地產代理",
-            "財務策劃／投資產品",
-            "B2B 服務／SaaS 軟件",
-            "培訓課程／教育",
-            "直銷／網絡生意",
-        ]
-        chosen = industry_list[idx] if idx < len(industry_list) else None
-        if chosen:
-            stats = load_stats()
-            stats["preferred_industry"] = chosen
-            save_stats(stats)
-            answer_callback(cb["id"], f"已選：{chosen}")
-            threading.Thread(
-                target=start_practice,
-                kwargs={"force_industry": chosen},
-                daemon=True,
-            ).start()
+    elif data.startswith("setup_ind_"):
+        idx = int(data[len("setup_ind_"):])
+        if idx < len(SETUP_INDUSTRY_LIST):
+            _, _, full_name = SETUP_INDUSTRY_LIST[idx]
+            profile = load_profile()
+            profile["industry"] = full_name
+            save_profile(profile)
+            answer_callback(cb["id"], f"✅ {full_name}")
+            save_setup_session({"state": "setup_jobtitle"})
+            send_telegram(f"✅ 行業：{full_name}\n\n🎯 你嘅目標職位係？（直接打，例如：Product Manager）")
         else:
-            answer_callback(cb["id"], "揀取失敗，請再試")
+            answer_callback(cb["id"], "出錯，請再試")
 
-    elif data == "show_stats":
-        answer_callback(cb["id"])
-        handle_stats()
+    # ── Setup：MBTI ──
+    elif data.startswith("setup_mbti_"):
+        mbti_val = data[len("setup_mbti_"):]
+        profile  = load_profile()
+        if mbti_val == "skip":
+            answer_callback(cb["id"], "已跳過")
+            clear_setup_session()
+            _send_setup_done(profile)
+        else:
+            profile["mbti"] = mbti_val
+            save_profile(profile)
+            answer_callback(cb["id"], f"✅ {mbti_val}")
+            clear_setup_session()
+            coaching = MBTI_COACHING.get(mbti_val, {})
+            note = f"\n\n💡 {mbti_val} 面試特點：{coaching.get('watch_out', '')}" if coaching else ""
+            _send_setup_done(profile, extra=note)
 
-    elif data == "social_practice":
-        answer_callback(cb["id"])
-        handle_social_platform_menu()
-
-    elif data == "social_content":
-        answer_callback(cb["id"])
-        handle_social_content_menu()
-
-    elif data.startswith("social_platform_"):
-        platform = data[len("social_platform_"):]
-        answer_callback(cb["id"], f"生成 {platform} 場景⋯⋯")
-        threading.Thread(target=run_social_scenario, args=(platform,), daemon=True).start()
-
-    elif data.startswith("social_ct_"):
-        content_type = data[len("social_ct_"):]
-        answer_callback(cb["id"])
-        threading.Thread(target=run_social_content, args=(content_type,), daemon=True).start()
-
-    elif data.startswith("strategy_"):
-        strategy_key = data[len("strategy_"):]
-        answer_callback(cb["id"], "評估緊⋯⋯" if strategy_key != "freetext" else "自由輸入模式")
-        threading.Thread(
-            target=handle_strategy_pick,
-            args=(strategy_key,),
-            daemon=True,
-        ).start()
-
+    # ── Drill ──
     elif data.startswith("drill_"):
-        obj_name = data[6:]
-        answer_callback(cb["id"], f"生成「{obj_name}」場景⋯⋯")
-        stats = load_stats()
-        preferred = stats.get("preferred_industry")
+        qtype_name = data[6:]
+        answer_callback(cb["id"], f"生成「{qtype_name}」場景⋯⋯")
         threading.Thread(
             target=start_practice,
-            kwargs={"force_objection": obj_name, "force_industry": preferred},
+            kwargs={"force_qtype": qtype_name},
             daemon=True,
         ).start()
+
+
+def _send_setup_done(profile: dict, extra: str = ""):
+    job   = profile.get("job_title", "未設定")
+    ind   = profile.get("industry",  "未設定")
+    mbti  = profile.get("mbti",      "未設定")
+    send_telegram(
+        f"✅ 設定完成！\n\n"
+        f"🎯 目標職位：{job}\n"
+        f"🏭 行業：{ind}\n"
+        f"🧠 MBTI：{mbti}"
+        f"{extra}\n\n"
+        f"用 /practice 開始你嘅面試練習！",
+        reply_markup={"inline_keyboard": [[
+            {"text": "🎯 立即練習", "callback_data": "practice_new"},
+        ]]}
+    )
 
 
 # ── 指令處理 ──────────────────────────────────────────────────────
@@ -494,63 +413,60 @@ def cmd(text: str, command: str) -> bool:
 
 
 def handle_message(text: str):
-    # Setup session 中：非指令訊息 = 填寫公司 / 產品
+    # Setup session 中：非指令訊息 = 填寫職位 / 公司
     setup = load_setup_session()
     if setup and not text.startswith("/"):
         state = setup.get("state")
+
         if state == "setup_industry_custom":
             profile = load_profile()
             profile["industry"] = text.strip()
             save_profile(profile)
-            stats = load_stats()
-            stats["preferred_industry"] = text.strip()
-            save_stats(stats)
-            save_setup_session({"state": "setup_company"})
-            send_telegram(f"✅ 行業：{text.strip()}\n\n🏢 你係邊間公司 / 機構做嘅？（直接打名）")
-            return
-        if state == "setup_company":
-            profile = load_profile()
-            profile["company"] = text.strip()
-            save_profile(profile)
-            save_setup_session({"state": "setup_product"})
-            send_telegram(f"✅ 公司：{text.strip()}\n\n📦 你主要賣咩產品或服務？（直接打出來）")
-            return
-        elif state == "setup_product":
-            profile = load_profile()
-            profile["product"] = text.strip()
-            save_profile(profile)
-            clear_setup_session()
-            send_telegram(
-                f"✅ 設定完成！\n\n"
-                f"🏭 行業：{profile.get('industry', '')}\n"
-                f"🏢 公司：{profile.get('company', '')}\n"
-                f"📦 產品：{text.strip()}\n\n"
-                f"用 /practice 開始練習！"
-            )
+            save_setup_session({"state": "setup_jobtitle"})
+            send_telegram(f"✅ 行業：{text.strip()}\n\n🎯 你嘅目標職位係？（例如：UX Designer）")
             return
 
-    # 練習 session 中：非指令訊息 = 用戶回應
+        if state == "setup_jobtitle":
+            profile = load_profile()
+            profile["job_title"] = text.strip()
+            save_profile(profile)
+            save_setup_session({"state": "setup_mbti"})
+            send_mbti_keyboard()
+            return
+
+        if state == "setup_mbti":
+            # 手動打 MBTI（e.g. "INTJ"）
+            mbti_input = text.strip().upper()
+            if mbti_input in MBTI_COACHING:
+                profile = load_profile()
+                profile["mbti"] = mbti_input
+                save_profile(profile)
+                clear_setup_session()
+                coaching = MBTI_COACHING[mbti_input]
+                _send_setup_done(profile, extra=f"\n\n💡 {mbti_input} 面試特點：{coaching['watch_out']}")
+            else:
+                send_telegram("請從鍵盤揀選 MBTI，或者打「跳過」")
+            return
+
+    # Practice / Review session 中
     session = load_session()
-    if session and session.get("state") == "waiting_social_response" and not text.startswith("/"):
-        threading.Thread(target=handle_social_response, args=(text,), daemon=True).start()
-        return
+
     if session and session.get("state") == "waiting_review" and not text.startswith("/"):
         clear_session()
         profile = load_profile()
-        send_telegram("🔍 AI 分析緊你嘅對話，稍等⋯⋯")
+        send_telegram("🔍 AI 分析緊你嘅面試對話，稍等⋯⋯")
         threading.Thread(
             target=lambda: send_telegram(analyze_conversation(text, profile)),
             daemon=True,
         ).start()
         return
-    if session and session.get("state") in ("waiting_response", "waiting_strategy") and not text.startswith("/"):
+
+    if session and session.get("state") == "waiting_response" and not text.startswith("/"):
         log.info(f"練習回應: {text[:60]!r}")
-        # waiting_strategy 狀態下直接打字，視作自由輸入回應
-        if session.get("state") == "waiting_strategy":
-            session["state"] = "waiting_response"
-            save_session(session)
         threading.Thread(target=handle_user_response, args=(text,), daemon=True).start()
         return
+
+    # ── 指令 ──
 
     if cmd(text, "/setup"):
         clear_setup_session()
@@ -559,27 +475,27 @@ def handle_message(text: str):
 
     if cmd(text, "/help") or cmd(text, "/start"):
         profile = load_profile()
-        if not profile.get("industry"):
+        if not profile.get("job_title") and not profile.get("industry"):
             handle_setup_start(intro=True)
             return
         send_telegram(
-            "🥊 銷售話術訓練機器人\n\n"
-            "/practice — 隨機練習一個場景\n"
+            "🎓 AI 面試教練\n\n"
+            "/practice — 隨機面試練習\n"
             "/practice 初級／中級／高級 — 指定難度\n"
-            "/drill — 針對特定拒絕類型\n"
-            "/social — 社交媒體回覆練習 / 生成內容\n"
-            "/review — 貼真實對話，AI 分析失分點\n"
+            "/drill — 針對特定題型練習\n"
+            "/review — 貼真實面試答案，AI 分析失分點\n"
             "/stats — 查看進度報告\n"
             "/streak — 練習連續天數\n"
-            "/tip — 今日銷售技巧\n"
-            "/setup — 更改背景設定\n\n"
-            "💡 每日練習 5 分鐘，90 日後成交率會嚇親自己"
+            "/tip — 今日面試技巧\n"
+            "/setup — 更改目標職位 + MBTI\n"
+            "/mystatus — 我的設定\n\n"
+            "💡 每日練習 10 分鐘，面試表現 30 日內明顯提升"
         )
         return
 
     if cmd(text, "/practice"):
         profile = load_profile()
-        if not profile.get("industry"):
+        if not profile.get("industry") and not profile.get("job_title"):
             handle_setup_start(intro=True)
             return
 
@@ -587,13 +503,7 @@ def handle_message(text: str):
         extra = parts[1].strip() if len(parts) > 1 else None
         diff  = extra if extra in DIFFICULTY_LEVELS else None
 
-        industry = profile.get("industry")
-        send_telegram(
-            f"🎯 生成練習場景⋯⋯",
-            reply_markup={"inline_keyboard": [[
-                {"text": "⚙️ 改設定", "callback_data": "do_setup"},
-            ]]}
-        )
+        send_telegram("🎯 生成面試場景⋯⋯")
         threading.Thread(
             target=start_practice,
             kwargs={"difficulty": diff},
@@ -601,17 +511,16 @@ def handle_message(text: str):
         ).start()
         return
 
-    if cmd(text, "/social"):
-        handle_social_menu()
+    if cmd(text, "/drill"):
+        handle_drill_menu()
         return
 
     if cmd(text, "/review"):
         save_session({"state": "waiting_review"})
-        send_telegram("📋 貼上你嘅真實銷售對話（客戶同你嘅對話記錄），AI 幫你分析失分點同改善話術：")
-        return
-
-    if cmd(text, "/drill"):
-        handle_drill_menu()
+        send_telegram(
+            "📋 貼上你嘅真實面試問答記錄，AI 幫你分析失分點同改善方向：\n\n"
+            "（格式：面試官問：xxx\n我答：xxx）"
+        )
         return
 
     if cmd(text, "/stats"):
@@ -627,7 +536,7 @@ def handle_message(text: str):
         send_telegram(
             f"{emoji} 連續練習：{count} 日\n"
             f"總練習次數：{total} 次\n\n"
-            f"每日練習，成交率係咁升！"
+            f"每日練習，面試信心係咁升！"
         )
         return
 
@@ -636,16 +545,23 @@ def handle_message(text: str):
         return
 
     if cmd(text, "/mystatus"):
-        stats    = load_stats()
-        industry = stats.get("preferred_industry", "未設定")
-        total    = stats.get("total_sessions", 0)
-        streak   = stats.get("streak", {}).get("count", 0)
+        profile = load_profile()
+        data    = load_stats()
+        total   = data.get("total_sessions", 0)
+        streak  = data.get("streak", {}).get("count", 0)
+        mbti    = profile.get("mbti", "未設定")
+        coaching_note = ""
+        if profile.get("mbti") and profile["mbti"].upper() in MBTI_COACHING:
+            c = MBTI_COACHING[profile["mbti"].upper()]
+            coaching_note = f"\n💡 你嘅面試盲點：{c['watch_out']}"
         send_telegram(
             f"⚙️ 我的設定\n\n"
-            f"🏭 偏好行業：{industry}\n"
+            f"🎯 目標職位：{profile.get('job_title', '未設定')}\n"
+            f"🏭 行業：{profile.get('industry', '未設定')}\n"
+            f"🧠 MBTI：{mbti}{coaching_note}\n\n"
             f"📊 總練習次數：{total}\n"
             f"🔥 連續天數：{streak}\n\n"
-            f"換行業：用 /practice 然後撳「🔄 換行業」"
+            f"更改設定：/setup"
         )
         return
 
@@ -654,7 +570,7 @@ def handle_message(text: str):
 
 def poll():
     register_commands()
-    log.info(f"Sales Trainer Bot 啟動 {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    log.info(f"AI 面試教練 Bot 啟動 {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
     url    = f"https://api.telegram.org/bot{os.getenv('TELEGRAM_BOT_TOKEN')}/getUpdates"
     offset = None
