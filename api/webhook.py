@@ -532,6 +532,16 @@ def handle_callback(cb):
         qtype_name = data[6:]
         start_practice(force_qtype=qtype_name)
 
+    elif data == "onboard_cv":
+        send_telegram(
+            "📄 請直接將你嘅 CV 拖入呢個 chat（PDF 或 Word .docx）。\n\n"
+            "AI 會自動分析你嘅背景，然後開始個人化練習！"
+        )
+
+    elif data == "onboard_manual":
+        clear_setup_session()
+        send_industry_keyboard(intro=False)
+
     elif data == "review_start":
         save_session({"state": "waiting_review"})
         send_telegram(
@@ -599,7 +609,14 @@ def handle_message(text):
     if cmd(text, "/start") or cmd(text, "/help"):
         profile = load_profile()
         if not profile or (not profile.get("job_title") and not profile.get("industry")):
-            send_industry_keyboard(intro=True)
+            send_telegram(
+                "👋 歡迎！AI 面試教練幫你針對練習，提升面試表現。\n\n"
+                "首先設定你嘅背景，練習會更貼近你嘅實際情況：",
+                reply_markup={"inline_keyboard": [
+                    [{"text": "📄 上傳 CV（PDF / DOCX）", "callback_data": "onboard_cv"}],
+                    [{"text": "✏️ 自己輸入背景",          "callback_data": "onboard_manual"}],
+                ]}
+            )
             return
         send_telegram(
             "🎓 AI 面試教練\n\n"
@@ -619,7 +636,13 @@ def handle_message(text):
 
     if cmd(text, "/setup"):
         clear_setup_session()
-        send_industry_keyboard(intro=False)
+        send_telegram(
+            "⚙️ 更新背景設定：",
+            reply_markup={"inline_keyboard": [
+                [{"text": "📄 重新上傳 CV", "callback_data": "onboard_cv"}],
+                [{"text": "✏️ 手動輸入",    "callback_data": "onboard_manual"}],
+            ]}
+        )
         return
 
     if cmd(text, "/practice"):
@@ -694,7 +717,13 @@ def handle_message(text):
     # 未知輸入：引導
     profile = load_profile()
     if not profile or (not profile.get("job_title") and not profile.get("industry")):
-        send_industry_keyboard(intro=True)
+        send_telegram(
+            "先設定你嘅背景，練習會更個人化 👇",
+            reply_markup={"inline_keyboard": [
+                [{"text": "📄 上傳 CV", "callback_data": "onboard_cv"}],
+                [{"text": "✏️ 手動輸入", "callback_data": "onboard_manual"}],
+            ]}
+        )
     else:
         send_telegram(
             "輸入 /practice 開始練習，/help 睇所有指令 😊",
