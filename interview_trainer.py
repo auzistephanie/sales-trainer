@@ -510,3 +510,42 @@ def get_daily_tip() -> str:
     from datetime import date
     idx = date.today().toordinal() % len(DAILY_TIPS)
     return DAILY_TIPS[idx]
+
+
+# ── Resume 解析 ───────────────────────────────────────────────────
+
+def parse_resume(resume_text: str) -> dict:
+    """用 DeepSeek 分析 resume 文字，提取結構化 profile 資訊。"""
+    import json as _json
+    ai_client = OpenAI(api_key=DEEPSEEK_API_KEY, base_url="https://api.deepseek.com")
+
+    prompt = f"""你係一個 HR 專家，分析以下 resume 內容，提取結構化資訊。
+
+【Resume 內容】
+{resume_text[:3500]}
+
+【輸出格式——只輸出 JSON，唔要任何其他文字，唔要 markdown code block】
+{{
+  "job_title": "最近或目標職位（例如：Marketing Manager）",
+  "industry": "所屬行業（從以下選最近似：金融／投資銀行、科技／軟件開發、市場營銷／廣告、管理諮詢、零售／酒店管理、初創公司、醫療／藥劑／健康科技、法律／合規、人力資源／招聘、教育／培訓、物流／供應鏈、地產／建築工程、傳媒／娛樂／創意、政府／NGO／公共服務）",
+  "exp_years": 估計工作年資數字（純數字，例如 5）,
+  "current_company": "最近工作公司名稱",
+  "key_skills": "3–5 個核心技能，逗號分隔",
+  "education": "最高學歷（例如：港大 商學士）",
+  "summary": "一句話描述此人背景（廣東話口語）"
+}}"""
+
+    try:
+        resp = ai_client.chat.completions.create(
+            model="deepseek-chat",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.2,
+            max_tokens=500,
+        )
+        content = resp.choices[0].message.content.strip()
+        # 移除可能嘅 markdown fences
+        content = content.replace("```json", "").replace("```", "").strip()
+        return _json.loads(content)
+    except Exception as e:
+        print(f"[parse_resume] 失敗：{e}")
+        return {}
