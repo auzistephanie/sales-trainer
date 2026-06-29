@@ -631,3 +631,219 @@ def parse_resume(resume_text: str) -> dict:
     except Exception as e:
         print(f"[parse_resume] 失敗：{e}")
         return {}
+
+
+# ── Cover Letter + Tailored CV 生成 ──────────────────────────────
+
+def generate_cover_letter_from_jd(cv_text: str, jd_text: str, company: str, role: str) -> str:
+    """根據 CV 全文 + JD，生成針對性 Cover Letter（英文，約 280 字）。"""
+    ai_client = OpenAI(api_key=DEEPSEEK_API_KEY, base_url="https://api.deepseek.com")
+
+    prompt = f"""You are an experienced HK HR consultant with 10+ years experience.
+Write a tailored, professional cover letter for the following job application.
+
+【Applicant's CV】
+{cv_text[:3000]}
+
+【Target Job】
+Company: {company}
+Role: {role}
+Job Description:
+{jd_text[:2000]}
+
+【Requirements】
+- Length: 3 paragraphs, ~280 words
+- Tone: professional but warm, confident
+- Para 1: Opening — who you are + why this specific role excites you
+- Para 2: Highlight 2-3 most relevant experiences/achievements that match the JD
+- Para 3: Why this company + call to action
+- Use specific details from both the CV and JD — no generic filler
+- Format: plain text, no markdown, ready to paste into email
+- Sign off with: Yours sincerely,\n[Your Name]"""
+
+    try:
+        resp = ai_client.chat.completions.create(
+            model="deepseek-chat",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.6,
+            max_tokens=800,
+        )
+        return resp.choices[0].message.content
+    except Exception as e:
+        return f"⚠️ 生成失敗：{e}"
+
+
+def generate_tailored_cv_content(cv_text: str, jd_text: str, company: str, role: str) -> dict:
+    """根據 JD 分析 CV，返回 tailored CV 各部份內容（dict），供 .docx 生成用。"""
+    import json as _json
+    ai_client = OpenAI(api_key=DEEPSEEK_API_KEY, base_url="https://api.deepseek.com")
+
+    prompt = f"""You are an expert CV writer. Tailor the applicant's CV for this specific job.
+
+【Original CV】
+{cv_text[:3000]}
+
+【Target Job】
+Company: {company}
+Role: {role}
+JD:
+{jd_text[:2000]}
+
+Output ONLY valid JSON (no markdown, no code block) with this exact structure:
+{{
+  "name": "full name from CV",
+  "contact": "email | phone | location (one line)",
+  "summary": "2-3 sentence professional summary tailored to this role (English)",
+  "core_competencies": ["skill 1", "skill 2", "skill 3", "skill 4", "skill 5", "skill 6"],
+  "experience": [
+    {{
+      "company": "company name",
+      "role": "job title",
+      "period": "date range",
+      "bullets": ["bullet 1 tailored to JD", "bullet 2", "bullet 3"]
+    }}
+  ],
+  "education": [
+    {{"institution": "...", "degree": "...", "year": "..."}}
+  ],
+  "additional": "languages, certifications, tools (one line)"
+}}"""
+
+    try:
+        resp = ai_client.chat.completions.create(
+            model="deepseek-chat",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.4,
+            max_tokens=1500,
+        )
+        content = resp.choices[0].message.content.strip()
+        content = content.replace("```json", "").replace("```", "").strip()
+        return _json.loads(content)
+    except Exception as e:
+        print(f"[generate_tailored_cv_content] 失敗：{e}")
+        return {}
+
+
+def build_cv_docx(cv_data: dict, company: str, role: str) -> bytes:
+    """將 tailored CV dict 轉成 .docx bytes，可直接發 Telegram。"""
+    from docx import Document
+    from docx.shared import Pt, RGBColor, Inches
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+    import io
+
+    doc = Document()
+
+    # 頁面設定
+    section = doc.sections[0]
+    section.top_margin    = Inches(0.6)
+    section.bottom_margin = Inches(0.6)
+    section.left_margin   = Inches(0.8)
+    section.right_margin  = Inches(0.8)
+
+    BLUE = RGBColor(0x2E, 0x74, 0xB5)
+
+    def heading(text, size=14, color=BLUE, bold=True, align=WD_ALIGN_PARAGRAPH.LEFT):
+        p = doc.add_paragraph()
+        p.alignment = align
+        run = p.add_run(text)
+        run.bold = bold
+        run.font.size = Pt(size)
+        run.font.color.rgb = color
+        return p
+
+    def divider():
+        p = doc.add_paragraph()
+        p.paragraph_format.space_before = Pt(2)
+        p.paragraph_format.space_after  = Pt(4)
+        run = p.add_run("─" * 55)
+        run.font.size = Pt(9)
+        run.font.color.rgb = RGBColor(0xCC, 0xCC, 0xCC)
+
+    def section_title(text):
+        p = doc.add_paragraph()
+        p.paragraph_format.space_before = Pt(8)
+        p.paragraph_format.space_after  = Pt(2)
+        run = p.add_run(text.upper())
+        run.bold = True
+        run.font.size = Pt(9)
+        run.font.color.rgb = BLUE
+
+    def body(text, size=10, bold=False, space_after=2):
+        p = doc.add_paragraph()
+        p.paragraph_format.space_after = Pt(space_after)
+        run = p.add_run(text)
+        run.font.size = Pt(size)
+        run.bold = bold
+        return p
+
+    # ── Header ──
+    p_name = doc.add_paragraph()
+    p_name.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    r = p_name.add_run(cv_data.get("name", ""))
+    r.bold = True; r.font.size = Pt(18); r.font.color.rgb = BLUE
+
+    p_contact = doc.add_paragraph()
+    p_contact.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    rc = p_contact.add_run(cv_data.get("contact", ""))
+    rc.font.size = Pt(9); rc.font.color.rgb = RGBColor(0x55, 0x55, 0x55)
+    p_contact.paragraph_format.space_after = Pt(2)
+
+    # tailored tag
+    p_tag = doc.add_paragraph()
+    p_tag.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    rt = p_tag.add_run(f"Tailored for: {role} @ {company}")
+    rt.font.size = Pt(8); rt.italic = True
+    rt.font.color.rgb = RGBColor(0x88, 0x88, 0x88)
+
+    divider()
+
+    # ── Summary ──
+    section_title("Professional Summary")
+    body(cv_data.get("summary", ""), space_after=4)
+
+    # ── Core Competencies ──
+    skills = cv_data.get("core_competencies", [])
+    if skills:
+        section_title("Core Competencies")
+        cols = 3
+        rows = (len(skills) + cols - 1) // cols
+        table = doc.add_table(rows=rows, cols=cols)
+        table.style = "Table Grid"
+        flat = skills + [""] * (rows * cols - len(skills))
+        for i, sk in enumerate(flat):
+            cell = table.cell(i // cols, i % cols)
+            cell.text = f"• {sk}" if sk else ""
+            for run in cell.paragraphs[0].runs:
+                run.font.size = Pt(9)
+        doc.add_paragraph()
+
+    # ── Experience ──
+    section_title("Professional Experience")
+    for exp in cv_data.get("experience", []):
+        p_role = doc.add_paragraph()
+        p_role.paragraph_format.space_after = Pt(0)
+        r1 = p_role.add_run(exp.get("role", ""))
+        r1.bold = True; r1.font.size = Pt(10)
+        r2 = p_role.add_run(f"  |  {exp.get('company', '')}  |  {exp.get('period', '')}")
+        r2.font.size = Pt(9)
+        r2.font.color.rgb = RGBColor(0x55, 0x55, 0x55)
+        for b in exp.get("bullets", []):
+            p_b = doc.add_paragraph(style="List Bullet")
+            p_b.paragraph_format.space_after = Pt(1)
+            run = p_b.add_run(b)
+            run.font.size = Pt(9)
+        doc.add_paragraph().paragraph_format.space_after = Pt(4)
+
+    # ── Education ──
+    section_title("Education")
+    for edu in cv_data.get("education", []):
+        body(f"{edu.get('degree','')} — {edu.get('institution','')} {edu.get('year','')}", size=9)
+
+    # ── Additional ──
+    if cv_data.get("additional"):
+        section_title("Additional")
+        body(cv_data["additional"], size=9)
+
+    buf = io.BytesIO()
+    doc.save(buf)
+    return buf.getvalue()
