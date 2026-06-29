@@ -613,9 +613,11 @@ def parse_resume(resume_text: str) -> dict:
   "exp_years": 估計工作年資數字（純數字，例如 5）,
   "current_company": "最近工作公司名稱",
   "key_skills": "3–5 個核心技能，逗號分隔",
-  "education": "最高學歷（例如：港大 商學士）",
+  "education": "最高學歷，搵 Education / 學歷 / Qualification 等 section，唔到就搵大學名稱（例如：HKU 工商管理學士 2018）",
   "summary": "一句話描述此人背景（廣東話口語）"
-}}"""
+}}
+
+注意：education 係必填，就算只有一間大學名稱都要填，唔好填「未提供」。"""
 
     try:
         resp = ai_client.chat.completions.create(
