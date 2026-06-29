@@ -614,7 +614,7 @@ def parse_resume(resume_text: str) -> dict:
   "current_company": "最近工作公司名稱",
   "key_skills": "3–5 個核心技能，逗號分隔",
   "education": "最高學歷，搵 Education / 學歷 / Qualification 等 section，唔到就搵大學名稱（例如：HKU 工商管理學士 2018）",
-  "summary": "一句話描述此人背景（廣東話口語）"
+  "summary": "一句話描述用家背景（廣東話口語，用第二人稱「你」，例如：「你有5年教育行業經驗，專長係...」）"
 }}
 
 注意：education 係必填，就算只有一間大學名稱都要填，唔好填「未提供」。"""
