@@ -10,21 +10,29 @@ load_dotenv(Path(__file__).parent.parent / ".env")
 import requests as req
 from datetime import datetime, timedelta
 
+import re as _re
+
 from interview_trainer import (
     generate_scenario, evaluate_response, analyze_conversation,
     QUESTION_TYPES, INDUSTRIES, DIFFICULTY_LEVELS, MBTI_COACHING,
-    get_daily_tip, parse_resume, generate_job_questions, generate_job_tips,
+    get_daily_tip, parse_resume,
+    generate_job_questions, generate_job_tips,
+    generate_cover_letter_from_jd, generate_tailored_cv_content, build_cv_docx,
 )
 from utils import (
     load_stats, save_stats,
     load_session, save_session, clear_session,
     load_profile, save_profile,
     load_setup_session, save_setup_session, clear_setup_session,
+    load_cv_text, save_cv_text,
+    load_jd_session, save_jd_session, clear_jd_session,
     load_jobs, save_jobs,
     load_addjob_session, save_addjob_session, clear_addjob_session,
-    send_telegram, set_current_chat_id,
+    send_telegram, send_document, set_current_chat_id,
     _redis_get, _redis_set, _redis_del,
 )
+
+_URL_RE = _re.compile(r'https?://\S+', _re.IGNORECASE)
 from mbti_checker import (
     MBTI_QUESTIONS, MBTI_QUICK_DESC,
     validate_mbti, format_mbti_list, calculate_mbti,
@@ -411,7 +419,8 @@ def handle_document(document: dict):
         send_telegram("❌ AI 分析失敗，請重試。")
         return
 
-    # 4. 更新 profile
+    # 4. 儲存 CV 全文 + 更新 profile
+    save_cv_text(resume_text)
     profile = load_profile() or {}
     if parsed.get("job_title"):       profile["job_title"] = parsed["job_title"]
     if parsed.get("industry"):        profile["industry"]  = parsed["industry"]
@@ -554,6 +563,21 @@ def handle_job_tips(job_id: str):
     ]]})
 
 
+def handle_job_questions_from_jd(sess: dict):
+    fake_job = {"company": sess.get("company",""), "role": sess.get("role",""), "jd": sess.get("jd_text","")}
+    send_telegram(f"🤔 生成 *{fake_job['company']}* 面試問題⋯⋯")
+    send_telegram(generate_job_questions(fake_job), reply_markup={"inline_keyboard": [[
+        {"text": "📄 生成 Cover Letter", "callback_data": "jd_cover_letter"},
+    ]]})
+
+def handle_job_tips_from_jd(sess: dict):
+    fake_job = {"company": sess.get("company",""), "role": sess.get("role",""), "jd": sess.get("jd_text","")}
+    send_telegram(f"💡 生成 *{fake_job['company']}* Key Tips⋯⋯")
+    send_telegram(generate_job_tips(fake_job), reply_markup={"inline_keyboard": [[
+        {"text": "📄 生成 Cover Letter", "callback_data": "jd_cover_letter"},
+    ]]})
+
+
 def handle_update_status_menu(job_id: str):
     jobs = load_jobs()
     job  = next((j for j in jobs if j["id"] == job_id), None)
@@ -565,6 +589,160 @@ def handle_update_status_menu(job_id: str):
     send_telegram(
         f"📊 更新 *{job['company']} — {job['role']}* 狀態：",
         reply_markup={"inline_keyboard": kb}
+    )
+
+
+# ── JD / Cover Letter / Tailored CV Handlers ─────────────────────
+
+def fetch_jd_via_jina(url: str) -> str:
+    """用 Jina Reader 抓取 URL 內容（支援 JS 渲染頁面）。"""
+    try:
+        resp = req.get(
+            f"https://r.jina.ai/{url}",
+            headers={"Accept": "text/plain", "X-No-Cache": "true"},
+            timeout=15,
+        )
+        if resp.ok and len(resp.text.strip()) > 200:
+            return resp.text[:4000]
+    except Exception as e:
+        print(f"[jina fetch] {e}")
+    return ""
+
+
+def handle_url_message(url: str):
+    """用戶發咗一條 URL — 嘗試抓 JD，然後問佢要做咩。"""
+    send_telegram("🔍 抓取職位資料中⋯⋯")
+    jd_text = fetch_jd_via_jina(url)
+
+    if not jd_text:
+        # Jina 抓唔到，叫用戶貼文字
+        save_jd_session({"state": "waiting_jd_text", "url": url})
+        send_telegram(
+            "⚠️ 未能自動抓取內容（可能係需要登入）\n\n"
+            "請直接貼上 JD 文字，我幫你繼續：",
+            reply_markup={"inline_keyboard": [[{"text": "❌ 取消", "callback_data": "jd_cancel"}]]}
+        )
+        return
+
+    # 成功抓到，嘗試從文字識別公司/職位
+    lines = [l.strip() for l in jd_text.split("\n") if l.strip()]
+    company_guess = ""
+    role_guess    = ""
+    for l in lines[:10]:
+        if len(l) < 60 and not company_guess:
+            company_guess = l
+        elif len(l) < 80 and not role_guess:
+            role_guess = l
+
+    save_jd_session({
+        "state":   "jd_ready",
+        "url":     url,
+        "jd_text": jd_text,
+        "company": company_guess,
+        "role":    role_guess,
+    })
+
+    send_telegram(
+        f"✅ 成功抓取職位資料！\n\n"
+        f"🏢 可能係：{company_guess}\n"
+        f"🎯 職位：{role_guess}\n\n"
+        "幫你做咩？",
+        reply_markup={"inline_keyboard": [
+            [{"text": "📄 生成 Cover Letter", "callback_data": "jd_cover_letter"}],
+            [{"text": "📋 生成 Tailored CV",  "callback_data": "jd_tailored_cv"}],
+            [
+                {"text": "❓ 面試問題", "callback_data": "jd_questions"},
+                {"text": "💡 Key Tips",  "callback_data": "jd_tips"},
+            ],
+            [{"text": "➕ 加入申請追蹤", "callback_data": "jd_add_to_tracker"}],
+            [{"text": "✏️ 修正公司/職位",  "callback_data": "jd_edit_info"}],
+        ]}
+    )
+
+
+def handle_jd_cover_letter():
+    """根據儲存嘅 JD session 生成 Cover Letter。"""
+    sess = load_jd_session()
+    if not sess:
+        send_telegram("⚠️ 冇 JD 資料，請重新貼 link 或 JD 文字。")
+        return
+    cv_text = load_cv_text()
+    if not cv_text:
+        send_telegram(
+            "⚠️ 未有你嘅 CV 記錄。請先上傳你嘅 CV（PDF 或 .docx），再生成 Cover Letter。"
+        )
+        return
+    send_telegram("✍️ AI 根據你嘅 CV 生成 Cover Letter 緊，稍等⋯⋯")
+    result = generate_cover_letter_from_jd(
+        cv_text,
+        sess.get("jd_text", ""),
+        sess.get("company", ""),
+        sess.get("role", ""),
+    )
+    send_telegram(
+        f"📄 *Cover Letter — {sess.get('company','')}*\n_{sess.get('role','')}_\n\n{result}",
+        reply_markup={"inline_keyboard": [
+            [{"text": "📋 生成 Tailored CV",   "callback_data": "jd_tailored_cv"}],
+            [{"text": "➕ 加入申請追蹤",        "callback_data": "jd_add_to_tracker"}],
+            [{"text": "🔄 重新生成",            "callback_data": "jd_cover_letter"}],
+        ]}
+    )
+
+
+def handle_jd_tailored_cv():
+    """生成 Tailored CV .docx 並發送。"""
+    sess = load_jd_session()
+    if not sess:
+        send_telegram("⚠️ 冇 JD 資料，請重新貼 link 或 JD 文字。")
+        return
+    cv_text = load_cv_text()
+    if not cv_text:
+        send_telegram("⚠️ 未有你嘅 CV 記錄。請先上傳 CV（PDF/.docx）到 bot。")
+        return
+    send_telegram("🛠️ AI 生成 Tailored CV 緊，稍等約 15 秒⋯⋯")
+    company = sess.get("company", "")
+    role    = sess.get("role", "")
+    cv_data = generate_tailored_cv_content(cv_text, sess.get("jd_text", ""), company, role)
+    if not cv_data:
+        send_telegram("❌ 生成失敗，請重試。")
+        return
+    try:
+        docx_bytes = build_cv_docx(cv_data, company, role)
+        filename   = f"CV_Tailored_{company.replace(' ','_')[:20]}.docx"
+        send_document(docx_bytes, filename, caption=f"📄 Tailored CV for {role} @ {company}")
+        send_telegram(
+            "✅ Tailored CV 已生成！",
+            reply_markup={"inline_keyboard": [
+                [{"text": "📄 生成 Cover Letter", "callback_data": "jd_cover_letter"}],
+                [{"text": "➕ 加入申請追蹤",      "callback_data": "jd_add_to_tracker"}],
+            ]}
+        )
+    except Exception as e:
+        send_telegram(f"❌ 生成 .docx 失敗：{e}")
+
+
+def handle_jd_add_to_tracker():
+    """將 JD session 嘅職位加入申請追蹤。"""
+    import uuid
+    sess = load_jd_session()
+    if not sess:
+        send_telegram("⚠️ 冇 JD 資料。")
+        return
+    jobs = load_jobs()
+    job  = {
+        "id":           str(uuid.uuid4())[:8],
+        "company":      sess.get("company", ""),
+        "role":         sess.get("role", ""),
+        "jd":           sess.get("jd_text", "")[:500],
+        "link":         sess.get("url", ""),
+        "applied_date": datetime.now().strftime("%Y-%m-%d"),
+        "status":       "Applied",
+    }
+    jobs.append(job)
+    save_jobs(jobs)
+    send_telegram(
+        f"✅ 已加入追蹤！\n{job['company']} — {job['role']}\n申請日：{job['applied_date']}",
+        reply_markup={"inline_keyboard": [[{"text": "📋 睇所有申請", "callback_data": "show_listjobs"}]]}
     )
 
 
@@ -673,6 +851,37 @@ def handle_callback(cb):
             "（格式：面試官問：xxx\n我答：xxx）"
         )
 
+    elif data == "jd_cover_letter":
+        handle_jd_cover_letter()
+
+    elif data == "jd_tailored_cv":
+        handle_jd_tailored_cv()
+
+    elif data == "jd_questions":
+        sess = load_jd_session()
+        if sess:
+            handle_job_questions_from_jd(sess)
+        else:
+            send_telegram("⚠️ 冇 JD 資料，請重新貼 link。")
+
+    elif data == "jd_tips":
+        sess = load_jd_session()
+        if sess:
+            handle_job_tips_from_jd(sess)
+        else:
+            send_telegram("⚠️ 冇 JD 資料，請重新貼 link。")
+
+    elif data == "jd_add_to_tracker":
+        handle_jd_add_to_tracker()
+
+    elif data == "jd_cancel":
+        clear_jd_session()
+        send_telegram("✅ 已取消。")
+
+    elif data == "jd_edit_info":
+        save_jd_session({**load_jd_session(), "state": "waiting_company"})
+        send_telegram("✏️ 請輸入公司名稱：")
+
     elif data == "addjob_start":
         handle_addjob_start()
 
@@ -745,6 +954,56 @@ def handle_callback(cb):
 # ── Message ───────────────────────────────────────────────────────
 
 def handle_message(text):
+    # JD session flow（waiting for JD text after failed link fetch）
+    jd_sess = load_jd_session()
+    if jd_sess and not text.startswith("/"):
+        state = jd_sess.get("state", "")
+
+        if state == "waiting_jd_text":
+            jd_sess["jd_text"] = text.strip()
+            jd_sess["state"]   = "jd_ready"
+            save_jd_session(jd_sess)
+            send_telegram(
+                "✅ JD 已收到！幫你做咩？",
+                reply_markup={"inline_keyboard": [
+                    [{"text": "📄 生成 Cover Letter", "callback_data": "jd_cover_letter"}],
+                    [{"text": "📋 生成 Tailored CV",  "callback_data": "jd_tailored_cv"}],
+                    [
+                        {"text": "❓ 面試問題", "callback_data": "jd_questions"},
+                        {"text": "💡 Key Tips",  "callback_data": "jd_tips"},
+                    ],
+                    [{"text": "➕ 加入申請追蹤", "callback_data": "jd_add_to_tracker"}],
+                ]}
+            )
+            return
+
+        if state == "waiting_company":
+            jd_sess["company"] = text.strip()
+            jd_sess["state"]   = "waiting_role"
+            save_jd_session(jd_sess)
+            send_telegram("✏️ 職位名稱係？")
+            return
+
+        if state == "waiting_role":
+            jd_sess["role"]  = text.strip()
+            jd_sess["state"] = "jd_ready"
+            save_jd_session(jd_sess)
+            send_telegram(
+                f"✅ {jd_sess.get('company','')} — {jd_sess['role']}\n\n幫你做咩？",
+                reply_markup={"inline_keyboard": [
+                    [{"text": "📄 生成 Cover Letter", "callback_data": "jd_cover_letter"}],
+                    [{"text": "📋 生成 Tailored CV",  "callback_data": "jd_tailored_cv"}],
+                    [{"text": "➕ 加入申請追蹤",      "callback_data": "jd_add_to_tracker"}],
+                ]}
+            )
+            return
+
+    # URL 偵測（唔係 session 狀態，直接貼 link）
+    url_match = _URL_RE.search(text)
+    if url_match and not text.startswith("/"):
+        handle_url_message(url_match.group(0))
+        return
+
     # AddJob flow（優先於 setup flow）
     addjob = load_addjob_session()
     if addjob and not text.startswith("/"):
