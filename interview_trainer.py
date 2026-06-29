@@ -512,6 +512,88 @@ def get_daily_tip() -> str:
     return DAILY_TIPS[idx]
 
 
+# ── Job-specific AI functions ─────────────────────────────────────
+
+def generate_job_questions(job: dict) -> str:
+    """針對特定 JD 生成 6 個最可能出現的面試問題。"""
+    ai_client = OpenAI(api_key=DEEPSEEK_API_KEY, base_url="https://api.deepseek.com")
+    company = job.get("company", "（未填）")
+    role    = job.get("role",    "（未填）")
+    jd      = job.get("jd",     "")
+
+    prompt = f"""你係一個資深 HR，幫我針對以下職位生成 6 個最可能問嘅面試問題。
+
+公司：{company}
+職位：{role}
+JD 內容：
+{jd[:2000] if jd else "（未提供 JD）"}
+
+【輸出格式——廣東話口語，直接輸出問題列表】
+
+1. （行為題 / STAR 題）
+2. （職位相關 competency 題）
+3. （動機 / Why this company）
+4. （壓力 / 衝突處理）
+5. （領導 / 成就例子）
+6. （未來規劃 / Career goal）
+
+每條問題後加：
+💡 回答重點：（一句建議）"""
+
+    try:
+        resp = ai_client.chat.completions.create(
+            model="deepseek-chat",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.7,
+            max_tokens=1000,
+        )
+        return resp.choices[0].message.content
+    except Exception as e:
+        return f"⚠️ 生成失敗：{e}"
+
+
+def generate_job_tips(job: dict) -> str:
+    """針對特定 JD 生成 key talking points。"""
+    ai_client = OpenAI(api_key=DEEPSEEK_API_KEY, base_url="https://api.deepseek.com")
+    company = job.get("company", "（未填）")
+    role    = job.get("role",    "（未填）")
+    jd      = job.get("jd",     "")
+
+    prompt = f"""你係一個面試 coach，分析以下職位，提供面試前 key talking points。
+
+公司：{company}
+職位：{role}
+JD：
+{jd[:2000] if jd else "（未提供 JD）"}
+
+【輸出格式——廣東話口語】
+
+🎯 呢個職位最重視嘅 3 件事：
+1.
+2.
+3.
+
+💼 你應該重點 highlight 嘅經歷類型：
+（2–3 條具體建議）
+
+⚠️ 常見失分陷阱：
+（1–2 條要避免嘅）
+
+✨ 30 秒 Elevator Pitch 框架：
+「我係...，有...年...經驗，喺...方面...，呢個職位吸引我因為...」"""
+
+    try:
+        resp = ai_client.chat.completions.create(
+            model="deepseek-chat",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.7,
+            max_tokens=800,
+        )
+        return resp.choices[0].message.content
+    except Exception as e:
+        return f"⚠️ 生成失敗：{e}"
+
+
 # ── Resume 解析 ───────────────────────────────────────────────────
 
 def parse_resume(resume_text: str) -> dict:
