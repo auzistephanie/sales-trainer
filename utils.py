@@ -79,6 +79,16 @@ def save_setup_session(data: dict): _redis_set("interview_setup_session", data, 
 def clear_setup_session(): _redis_del("interview_setup_session")
 
 
+# ── Job Application Tracker ───────────────────────────────────────
+
+def load_jobs() -> list: return _redis_get("interview_jobs") or []
+def save_jobs(data: list): _redis_set("interview_jobs", data)
+
+def load_addjob_session() -> dict: return _redis_get("interview_addjob_session") or {}
+def save_addjob_session(data: dict): _redis_set("interview_addjob_session", data, ex=600)
+def clear_addjob_session(): _redis_del("interview_addjob_session")
+
+
 # ── Telegram ──────────────────────────────────────────────────────
 
 def _split_text(text: str, max_len: int = 4000) -> list:
