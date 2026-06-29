@@ -404,7 +404,13 @@ def handle_document(document: dict):
         else:
             import docx, io
             doc = docx.Document(io.BytesIO(file_bytes))
-            resume_text = "\n".join(p.text for p in doc.paragraphs if p.text.strip())
+            parts = [p.text for p in doc.paragraphs if p.text.strip()]
+            for table in doc.tables:
+                for row in table.rows:
+                    row_text = "  |  ".join(c.text.strip() for c in row.cells if c.text.strip())
+                    if row_text:
+                        parts.append(row_text)
+            resume_text = "\n".join(parts)
     except Exception as e:
         send_telegram(f"❌ 解析文件失敗：{e}\n請確保唔係掃描版圖片 PDF。")
         return
