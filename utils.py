@@ -79,6 +79,19 @@ def save_setup_session(data: dict): _redis_set("interview_setup_session", data, 
 def clear_setup_session(): _redis_del("interview_setup_session")
 
 
+# ── CV 全文儲存 ───────────────────────────────────────────────────
+
+def load_cv_text() -> str: return _redis_get("interview_cv_text") or ""
+def save_cv_text(text: str): _redis_set("interview_cv_text", text)
+
+
+# ── JD Session（link/text → Cover Letter / CV 流程）──────────────
+
+def load_jd_session() -> dict: return _redis_get("interview_jd_session") or {}
+def save_jd_session(data: dict): _redis_set("interview_jd_session", data, ex=900)
+def clear_jd_session(): _redis_del("interview_jd_session")
+
+
 # ── Job Application Tracker ───────────────────────────────────────
 
 def load_jobs() -> list: return _redis_get("interview_jobs") or []
@@ -101,6 +114,21 @@ def _split_text(text: str, max_len: int = 4000) -> list:
         chunks.append(text[:pos].rstrip()); text = text[pos:].lstrip()
     if text: chunks.append(text)
     return chunks
+
+def send_document(file_bytes: bytes, filename: str, caption: str = ""):
+    """Send a file (e.g. .docx) to the current Telegram chat."""
+    token   = os.getenv("TELEGRAM_BOT_TOKEN")
+    chat_id = _current_chat_id or os.getenv("TELEGRAM_CHAT_ID")
+    if not token or not chat_id:
+        return
+    url  = f"https://api.telegram.org/bot{token}/sendDocument"
+    data = {"chat_id": chat_id}
+    if caption: data["caption"] = caption
+    try:
+        requests.post(url, data=data, files={"document": (filename, file_bytes)}, timeout=30)
+    except requests.RequestException as e:
+        print(f"send_document 失敗: {e}")
+
 
 def send_telegram(text: str, reply_markup=None, max_retries: int = 3):
     token   = os.getenv("TELEGRAM_BOT_TOKEN")
