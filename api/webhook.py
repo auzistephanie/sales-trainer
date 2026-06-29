@@ -13,13 +13,15 @@ from datetime import datetime, timedelta
 from interview_trainer import (
     generate_scenario, evaluate_response, analyze_conversation,
     QUESTION_TYPES, INDUSTRIES, DIFFICULTY_LEVELS, MBTI_COACHING,
-    get_daily_tip, parse_resume,
+    get_daily_tip, parse_resume, generate_job_questions, generate_job_tips,
 )
 from utils import (
     load_stats, save_stats,
     load_session, save_session, clear_session,
     load_profile, save_profile,
     load_setup_session, save_setup_session, clear_setup_session,
+    load_jobs, save_jobs,
+    load_addjob_session, save_addjob_session, clear_addjob_session,
     send_telegram, set_current_chat_id,
     _redis_get, _redis_set, _redis_del,
 )
@@ -65,6 +67,17 @@ MBTI_LIST = [
     "ISTJ","ISFJ","ESTJ","ESFJ",
     "ISTP","ISFP","ESTP","ESFP",
 ]
+
+# ── Job Tracker 常數 ──────────────────────────────────────────────
+JOB_STATUSES = ["Applied", "Phone Screen", "1st Interview", "2nd Interview", "Offer", "Rejected"]
+STATUS_EMOJI  = {
+    "Applied":       "📝",
+    "Phone Screen":  "📞",
+    "1st Interview": "🤝",
+    "2nd Interview": "🔁",
+    "Offer":         "🎉",
+    "Rejected":      "❌",
+}
 
 
 # ── 工具 ──────────────────────────────────────────────────────────
@@ -444,6 +457,117 @@ def handle_drill_menu():
     send_telegram("🎯 揀你想針對練習的題型：", reply_markup={"inline_keyboard": kb})
 
 
+# ── Job Tracker Handlers ──────────────────────────────────────────
+
+def _save_addjob_final(addjob: dict):
+    """Save completed addjob session as a job record."""
+    import uuid
+    jobs = load_jobs()
+    job  = {
+        "id":           str(uuid.uuid4())[:8],
+        "company":      addjob.get("company", ""),
+        "role":         addjob.get("role", ""),
+        "jd":           addjob.get("jd", ""),
+        "link":         addjob.get("link", ""),
+        "applied_date": datetime.now().strftime("%Y-%m-%d"),
+        "status":       "Applied",
+    }
+    jobs.append(job)
+    save_jobs(jobs)
+    clear_addjob_session()
+    send_telegram(
+        f"✅ *求職記錄已儲存！*\n\n"
+        f"📝 {job['company']} — {job['role']}\n"
+        f"申請日：{job['applied_date']}",
+        reply_markup={"inline_keyboard": [
+            [
+                {"text": "❓ 睇面試問題", "callback_data": f"job_q_{job['id']}"},
+                {"text": "💡 Key Tips",   "callback_data": f"job_tips_{job['id']}"},
+            ],
+            [{"text": "📋 睇所有申請", "callback_data": "show_listjobs"}],
+        ]}
+    )
+
+
+def handle_addjob_start():
+    save_addjob_session({"state": "addjob_company"})
+    send_telegram(
+        "📋 *新增求職記錄*\n\n"
+        "第 1 步：公司名係？",
+        reply_markup={"inline_keyboard": [[{"text": "❌ 取消", "callback_data": "addjob_cancel"}]]}
+    )
+
+
+def handle_listjobs():
+    jobs = load_jobs()
+    if not jobs:
+        send_telegram(
+            "未有求職記錄。\n用 /addjob 新增第一個！",
+            reply_markup={"inline_keyboard": [[{"text": "➕ 新增", "callback_data": "addjob_start"}]]}
+        )
+        return
+    for job in jobs:
+        emoji = STATUS_EMOJI.get(job.get("status", "Applied"), "📝")
+        lines = [
+            f"{emoji} *{job['company']} — {job['role']}*",
+            f"狀態：{job.get('status','Applied')}  |  申請日：{job.get('applied_date','-')}",
+        ]
+        if job.get("link"):
+            lines.append(f"🔗 {job['link']}")
+        kb = [
+            [
+                {"text": "❓ 面試問題", "callback_data": f"job_q_{job['id']}"},
+                {"text": "💡 Key Tips",  "callback_data": f"job_tips_{job['id']}"},
+            ],
+            [
+                {"text": "🎯 練習",          "callback_data": f"job_practice_{job['id']}"},
+                {"text": "📊 更新狀態",      "callback_data": f"job_updatestatus_{job['id']}"},
+            ],
+        ]
+        send_telegram("\n".join(lines), reply_markup={"inline_keyboard": kb})
+
+
+def handle_job_questions(job_id: str):
+    jobs = load_jobs()
+    job  = next((j for j in jobs if j["id"] == job_id), None)
+    if not job:
+        send_telegram("⚠️ 搵唔到呢個申請記錄。")
+        return
+    send_telegram(f"🤔 AI 生成 *{job['company']}* 面試問題緊⋯⋯")
+    result = generate_job_questions(job)
+    send_telegram(result, reply_markup={"inline_keyboard": [[
+        {"text": "🎯 針對練習", "callback_data": f"job_practice_{job_id}"},
+    ]]})
+
+
+def handle_job_tips(job_id: str):
+    jobs = load_jobs()
+    job  = next((j for j in jobs if j["id"] == job_id), None)
+    if not job:
+        send_telegram("⚠️ 搵唔到呢個申請記錄。")
+        return
+    send_telegram(f"💡 AI 生成 *{job['company']}* Key Talking Points⋯⋯")
+    result = generate_job_tips(job)
+    send_telegram(result, reply_markup={"inline_keyboard": [[
+        {"text": "❓ 睇面試問題", "callback_data": f"job_q_{job_id}"},
+        {"text": "🎯 練習",       "callback_data": f"job_practice_{job_id}"},
+    ]]})
+
+
+def handle_update_status_menu(job_id: str):
+    jobs = load_jobs()
+    job  = next((j for j in jobs if j["id"] == job_id), None)
+    if not job:
+        send_telegram("⚠️ 搵唔到呢個申請記錄。")
+        return
+    kb = [[{"text": f"{STATUS_EMOJI.get(s,'')} {s}", "callback_data": f"job_status_{job_id}_{s}"}]
+          for s in JOB_STATUSES]
+    send_telegram(
+        f"📊 更新 *{job['company']} — {job['role']}* 狀態：",
+        reply_markup={"inline_keyboard": kb}
+    )
+
+
 # ── Callback ──────────────────────────────────────────────────────
 
 def handle_callback(cb):
@@ -549,10 +673,137 @@ def handle_callback(cb):
             "（格式：面試官問：xxx\n我答：xxx）"
         )
 
+    elif data == "addjob_start":
+        handle_addjob_start()
+
+    elif data == "show_listjobs":
+        handle_listjobs()
+
+    elif data == "addjob_cancel":
+        clear_addjob_session()
+        send_telegram("✅ 已取消。用 /addjob 再試。")
+
+    elif data == "addjob_skip_jd":
+        addjob = load_addjob_session()
+        if addjob:
+            addjob["jd"]    = ""
+            addjob["state"] = "addjob_link"
+            save_addjob_session(addjob)
+        send_telegram(
+            "第 4 步：貼上職位連結（或 /skip 跳過）：",
+            reply_markup={"inline_keyboard": [[{"text": "⏭️ 跳過", "callback_data": "addjob_skip_link"}]]}
+        )
+
+    elif data == "addjob_skip_link":
+        addjob = load_addjob_session()
+        if addjob:
+            addjob["link"] = ""
+            _save_addjob_final(addjob)
+
+    elif data.startswith("job_q_"):
+        handle_job_questions(data[6:])
+
+    elif data.startswith("job_tips_"):
+        handle_job_tips(data[9:])
+
+    elif data.startswith("job_practice_"):
+        job_id = data[13:]
+        jobs   = load_jobs()
+        job    = next((j for j in jobs if j["id"] == job_id), None)
+        if job:
+            profile = load_profile() or {}
+            if job.get("role"):
+                profile["job_title"] = job["role"]
+                save_profile(profile)
+            start_practice(force_industry=profile.get("industry"))
+        else:
+            send_telegram("⚠️ 搵唔到呢個申請記錄。")
+
+    elif data.startswith("job_updatestatus_"):
+        handle_update_status_menu(data[17:])
+
+    elif data.startswith("job_status_"):
+        # job_status_{id}_{status} — status 可能包含空格，所以 split 限3份
+        parts  = data.split("_", 3)   # ["job", "status", id, status_value]
+        if len(parts) == 4:
+            job_id     = parts[2]
+            new_status = parts[3]
+            jobs       = load_jobs()
+            for j in jobs:
+                if j["id"] == job_id:
+                    j["status"] = new_status
+                    break
+            save_jobs(jobs)
+            emoji = STATUS_EMOJI.get(new_status, "📝")
+            job   = next((j for j in jobs if j["id"] == job_id), {})
+            send_telegram(
+                f"{emoji} 已更新：*{job.get('company','')} — {job.get('role','')}*\n"
+                f"狀態 → {new_status}"
+            )
+
 
 # ── Message ───────────────────────────────────────────────────────
 
 def handle_message(text):
+    # AddJob flow（優先於 setup flow）
+    addjob = load_addjob_session()
+    if addjob and not text.startswith("/"):
+        state = addjob.get("state")
+
+        if state == "addjob_company":
+            addjob["company"] = text.strip()
+            addjob["state"]   = "addjob_role"
+            save_addjob_session(addjob)
+            send_telegram(
+                f"✅ 公司：{text.strip()}\n\n第 2 步：職位名稱係？",
+                reply_markup={"inline_keyboard": [[{"text": "❌ 取消", "callback_data": "addjob_cancel"}]]}
+            )
+            return
+
+        if state == "addjob_role":
+            addjob["role"]  = text.strip()
+            addjob["state"] = "addjob_jd"
+            save_addjob_session(addjob)
+            send_telegram(
+                f"✅ 職位：{text.strip()}\n\n第 3 步：貼上 JD 描述（或輸入 /skip 跳過）：",
+                reply_markup={"inline_keyboard": [[{"text": "⏭️ 跳過", "callback_data": "addjob_skip_jd"}]]}
+            )
+            return
+
+        if state == "addjob_jd":
+            addjob["jd"]    = text.strip()
+            addjob["state"] = "addjob_link"
+            save_addjob_session(addjob)
+            send_telegram(
+                "✅ JD 已儲存！\n\n第 4 步：貼上職位連結（或輸入 /skip 跳過）：",
+                reply_markup={"inline_keyboard": [[{"text": "⏭️ 跳過", "callback_data": "addjob_skip_link"}]]}
+            )
+            return
+
+        if state == "addjob_link":
+            addjob["link"] = text.strip()
+            _save_addjob_final(addjob)
+            return
+
+    # AddJob skip callbacks via text fallback
+    if text == "/skip":
+        addjob = load_addjob_session()
+        if addjob:
+            state = addjob.get("state")
+            if state == "addjob_jd":
+                addjob["jd"]    = ""
+                addjob["state"] = "addjob_link"
+                save_addjob_session(addjob)
+                send_telegram(
+                    "第 4 步：貼上職位連結（或 /skip 跳過）：",
+                    reply_markup={"inline_keyboard": [[{"text": "⏭️ 跳過", "callback_data": "addjob_skip_link"}]]}
+                )
+                return
+            if state == "addjob_link":
+                addjob["link"] = ""
+                _save_addjob_final(addjob)
+                return
+
     # Setup flow
     setup = load_setup_session()
     if setup and not text.startswith("/"):
@@ -620,17 +871,22 @@ def handle_message(text):
             return
         send_telegram(
             "🎓 AI 面試教練\n\n"
+            "📋 *求職追蹤*\n"
+            "/addjob — 新增求職申請\n"
+            "/listjobs — 睇所有申請 + AI 面試問題\n\n"
+            "🎯 *練習*\n"
             "/practice — 隨機面試練習\n"
             "/practice 初級／中級／高級 — 指定難度\n"
             "/drill — 針對特定題型練習\n"
-            "/review — 貼真實面試答案，AI 分析\n"
+            "/review — 貼真實面試答案，AI 分析\n\n"
+            "📊 *統計*\n"
             "/stats — 我的進度\n"
             "/streak — 練習連續天數\n"
-            "/tip — 今日面試技巧\n"
+            "/tip — 今日面試技巧\n\n"
+            "⚙️ *設定*\n"
             "/setup — 更改設定\n"
             "/mystatus — 我的設定\n\n"
-            "📄 上傳 PDF / DOCX resume — AI 自動分析並個人化練習\n\n"
-            "💡 每日練習 10 分鐘，面試表現明顯提升"
+            "📄 上傳 PDF / DOCX resume — AI 自動分析並個人化練習"
         )
         return
 
@@ -714,6 +970,14 @@ def handle_message(text):
         )
         return
 
+    if cmd(text, "/addjob"):
+        handle_addjob_start()
+        return
+
+    if cmd(text, "/listjobs") or cmd(text, "/jobs"):
+        handle_listjobs()
+        return
+
     # 未知輸入：引導
     profile = load_profile()
     if not profile or (not profile.get("job_title") and not profile.get("industry")):
@@ -770,6 +1034,8 @@ def set_webhook():
 
     # 2. 更新 Telegram 指令清單
     commands = [
+        {"command": "addjob",   "description": "新增求職申請記錄"},
+        {"command": "listjobs", "description": "查看所有申請 + AI 面試問題"},
         {"command": "practice", "description": "隨機面試練習"},
         {"command": "drill",    "description": "針對特定題型練習"},
         {"command": "stats",    "description": "我的進度報告"},
