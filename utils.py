@@ -1,5 +1,6 @@
 """共用工具函數：Redis I/O、Telegram 發送、session 管理。"""
 
+from __future__ import annotations
 import os
 import requests
 from pathlib import Path
