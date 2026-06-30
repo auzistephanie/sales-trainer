@@ -37,6 +37,7 @@ from interview_trainer import (
     get_daily_tip, generate_job_questions, generate_job_tips,
     parse_resume, calculate_cv_health, format_cv_health_message,
     generate_salary_benchmark, parse_salary_input,
+    extract_job_from_url,
 )
 from utils import (
     load_stats, save_stats,
@@ -441,6 +442,42 @@ def handle_user_response(user_text: str):
 
 # ── Job Application Tracker ───────────────────────────────────────
 
+def _auto_add_job_from_url(url: str):
+    """後台：fetch URL → 抽取 company/role/jd → 自動 save job。"""
+    from datetime import date as _date
+    info = extract_job_from_url(url)
+    company = info.get("company", "").strip()
+    role    = info.get("role", "").strip()
+    jd      = info.get("jd", "").strip()
+
+    if not company or not role:
+        send_telegram(
+            "⚠️ 未能自動讀取職位資料（可能需要登入或頁面受保護）。\n\n"
+            "用 /addjob 手動新增，貼上公司、職位同 JD。"
+        )
+        return
+
+    jobs   = load_jobs()
+    new_id = (max(j["id"] for j in jobs) + 1) if jobs else 1
+    jobs.append({
+        "id":           new_id,
+        "company":      company,
+        "role":         role,
+        "jd":           jd,
+        "link":         url,
+        "applied_date": str(_date.today()),
+        "status":       "Applied",
+    })
+    save_jobs(jobs)
+    send_telegram(
+        f"✅ 已自動新增申請！\n\n"
+        f"🏢 {company}\n"
+        f"💼 {role}\n"
+        f"📅 {_date.today()}  |  狀態：Applied\n\n"
+        f"用 /listjobs 睇詳情或更新狀態。"
+    )
+
+
 def handle_addjob_start():
     clear_addjob_session()
     save_addjob_session({"state": "addjob_company"})
@@ -700,14 +737,11 @@ def _is_job_url(text: str) -> bool:
 
 
 def handle_message(text: str):
-    # ── URL 自動 quick-add：直接發 link → 跳過 JD 步驟，只問公司 + 職位 ──
+    # ── URL 全自動 add：fetch → DeepSeek 抽取 → 直接 save ──────────
     addjob = load_addjob_session()
     if not addjob and _is_job_url(text):
-        save_addjob_session({"state": "addjob_company", "link": text.strip()})
-        send_telegram(
-            "🔗 收到職位 link！快速新增申請記錄：\n\n"
-            "🏢 公司名稱係？（例如：TransUnion）"
-        )
+        send_telegram("🔗 收到職位 link，正在讀取職位資料...")
+        threading.Thread(target=_auto_add_job_from_url, args=(text.strip(),), daemon=True).start()
         return
 
     # ── Add Job session ──
