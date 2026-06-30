@@ -1,5 +1,6 @@
 """用 GitHub API (PAT) 自動 push 更新，唔需要本地 git config。"""
 
+from __future__ import annotations
 import os
 import sys
 import base64
