@@ -1,5 +1,6 @@
 """用 GitHub API (PAT) 自動 push 更新，唔需要本地 git config。"""
 
+from __future__ import annotations
 import os
 import sys
 import base64
@@ -61,9 +62,17 @@ def main():
         print("❌ GITHUB_TOKEN / GITHUB_REPO 未設定（.env）")
         sys.exit(1)
 
-    for f in sorted(BASE_DIR.iterdir()):
-        if f.is_file() and not should_skip(f.name):
-            push_file(f, f.name, msg)
+    # 遞歸 push 所有檔案（包括子目錄如 api/）
+    for f in sorted(BASE_DIR.rglob("*")):
+        if not f.is_file():
+            continue
+        if should_skip(f.name):
+            continue
+        # 跳過 __pycache__ 同 .git 目錄
+        if any(part in ("__pycache__", ".git", "node_modules") for part in f.parts):
+            continue
+        repo_path = f.relative_to(BASE_DIR).as_posix()
+        push_file(f, repo_path, msg)
 
     print(f"\n🎉 push 完成：{msg}")
 
