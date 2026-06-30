@@ -28,7 +28,7 @@ from utils import (
     load_jd_session, save_jd_session, clear_jd_session,
     load_jobs, save_jobs,
     load_addjob_session, save_addjob_session, clear_addjob_session,
-    send_telegram, send_document, set_current_chat_id,
+    send_telegram, send_document, upload_to_drive, set_current_chat_id,
     _redis_get, _redis_set, _redis_del,
 )
 
@@ -612,13 +612,25 @@ def handle_job_tailored_cv(job_id: str):
     try:
         docx_bytes = build_cv_docx(cv_data, job["company"], job["role"])
         filename   = f"CV_{job['company'].replace(' ','_')[:20]}_{job['role'].replace(' ','_')[:15]}.docx"
-        send_document(docx_bytes, filename, caption=f"📋 Tailored CV for {job['role']} @ {job['company']}")
-        send_telegram(
-            "✅ Tailored CV 已生成！",
-            reply_markup={"inline_keyboard": [[
-                {"text": "📄 生成 Cover Letter", "callback_data": f"job_cl_{job_id}"},
-            ]]}
-        )
+        drive_link = upload_to_drive(docx_bytes, filename)
+        if drive_link:
+            send_telegram(
+                f"✅ Tailored CV 已上傳 Google Drive！\n\n"
+                f"📋 *{job['role']} @ {job['company']}*\n"
+                f"[🔗 打開 CV]({drive_link})",
+                reply_markup={"inline_keyboard": [[
+                    {"text": "📄 生成 Cover Letter", "callback_data": f"job_cl_{job_id}"},
+                ]]}
+            )
+        else:
+            # Fallback: send file directly via Telegram
+            send_document(docx_bytes, filename, caption=f"📋 Tailored CV for {job['role']} @ {job['company']}")
+            send_telegram(
+                "✅ Tailored CV 已生成！（Drive 未設定，直接傳送）",
+                reply_markup={"inline_keyboard": [[
+                    {"text": "📄 生成 Cover Letter", "callback_data": f"job_cl_{job_id}"},
+                ]]}
+            )
     except Exception as e:
         send_telegram(f"❌ 生成 .docx 失敗：{e}")
 
@@ -769,14 +781,27 @@ def handle_jd_tailored_cv():
     try:
         docx_bytes = build_cv_docx(cv_data, company, role)
         filename   = f"CV_Tailored_{company.replace(' ','_')[:20]}.docx"
-        send_document(docx_bytes, filename, caption=f"📄 Tailored CV for {role} @ {company}")
-        send_telegram(
-            "✅ Tailored CV 已生成！",
-            reply_markup={"inline_keyboard": [
-                [{"text": "📄 生成 Cover Letter", "callback_data": "jd_cover_letter"}],
-                [{"text": "➕ 加入申請追蹤",      "callback_data": "jd_add_to_tracker"}],
-            ]}
-        )
+        drive_link = upload_to_drive(docx_bytes, filename)
+        if drive_link:
+            send_telegram(
+                f"✅ Tailored CV 已上傳 Google Drive！\n\n"
+                f"📋 *{role} @ {company}*\n"
+                f"[🔗 打開 CV]({drive_link})",
+                reply_markup={"inline_keyboard": [
+                    [{"text": "📄 生成 Cover Letter", "callback_data": "jd_cover_letter"}],
+                    [{"text": "➕ 加入申請追蹤",      "callback_data": "jd_add_to_tracker"}],
+                ]}
+            )
+        else:
+            # Fallback: send file directly
+            send_document(docx_bytes, filename, caption=f"📄 Tailored CV for {role} @ {company}")
+            send_telegram(
+                "✅ Tailored CV 已生成！（Drive 未設定，直接傳送）",
+                reply_markup={"inline_keyboard": [
+                    [{"text": "📄 生成 Cover Letter", "callback_data": "jd_cover_letter"}],
+                    [{"text": "➕ 加入申請追蹤",      "callback_data": "jd_add_to_tracker"}],
+                ]}
+            )
     except Exception as e:
         send_telegram(f"❌ 生成 .docx 失敗：{e}")
 
