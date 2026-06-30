@@ -595,6 +595,51 @@ JD：
         return f"⚠️ 生成失敗：{e}"
 
 
+# ── Job URL 自動抽取 ──────────────────────────────────────────────
+
+def extract_job_from_url(url: str) -> dict:
+    """Fetch job URL → DeepSeek 抽出 company / role / jd。失敗返回空 dict。"""
+    import requests as _req
+    import json as _json
+
+    ai_client = OpenAI(api_key=DEEPSEEK_API_KEY, base_url="https://api.deepseek.com")
+
+    try:
+        resp = _req.get(url, timeout=15, headers={"User-Agent": "Mozilla/5.0"})
+        raw = resp.text[:6000]
+    except Exception as e:
+        print(f"[extract_job_from_url] fetch 失敗：{e}")
+        return {}
+
+    prompt = f"""你係一個 HR 助手。以下係一個求職頁面的 HTML 內容。
+請抽取職位資訊，只輸出 JSON，唔要任何其他文字或 markdown：
+
+{{
+  "company": "公司名稱",
+  "role": "職位名稱",
+  "jd": "JD 內容撮要（最多 500 字，廣東話或英文均可）"
+}}
+
+如果某項資訊找不到，填空字串。
+
+【頁面內容】
+{raw}"""
+
+    try:
+        r = ai_client.chat.completions.create(
+            model="deepseek-chat",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.1,
+            max_tokens=600,
+        )
+        content = r.choices[0].message.content.strip()
+        content = content.replace("```json", "").replace("```", "").strip()
+        return _json.loads(content)
+    except Exception as e:
+        print(f"[extract_job_from_url] DeepSeek 失敗：{e}")
+        return {}
+
+
 # ── Resume 解析 ───────────────────────────────────────────────────
 
 def parse_resume(resume_text: str) -> dict:
