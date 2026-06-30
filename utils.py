@@ -115,8 +115,39 @@ def _split_text(text: str, max_len: int = 4000) -> list:
     if text: chunks.append(text)
     return chunks
 
+def upload_to_drive(file_bytes: bytes, filename: str) -> str:
+    """Upload .docx to Google Drive, return shareable link. Returns '' on failure."""
+    import json as _j2, io as _io2
+    creds_raw = os.getenv("GOOGLE_CREDENTIALS", "")
+    folder_id = os.getenv("GOOGLE_DRIVE_FOLDER_ID", "")
+    if not creds_raw or not folder_id:
+        print("upload_to_drive: missing GOOGLE_CREDENTIALS or GOOGLE_DRIVE_FOLDER_ID")
+        return ""
+    try:
+        from google.oauth2 import service_account
+        from googleapiclient.discovery import build
+        from googleapiclient.http import MediaIoBaseUpload
+        creds = service_account.Credentials.from_service_account_info(
+            _j2.loads(creds_raw),
+            scopes=["https://www.googleapis.com/auth/drive"]
+        )
+        svc = build("drive", "v3", credentials=creds)
+        meta = {"name": filename, "parents": [folder_id]}
+        media = MediaIoBaseUpload(
+            _io2.BytesIO(file_bytes),
+            mimetype="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        )
+        f = svc.files().create(body=meta, media_body=media, fields="id").execute()
+        fid = f.get("id")
+        svc.permissions().create(fileId=fid, body={"type": "anyone", "role": "reader"}).execute()
+        return f"https://drive.google.com/file/d/{fid}/view"
+    except Exception as e:
+        print(f"upload_to_drive failed: {e}")
+        return ""
+
+
 def send_document(file_bytes: bytes, filename: str, caption: str = ""):
-    """Send a file (e.g. .docx) to the current Telegram chat."""
+    """Send a file (e.g. .docx) to the current Telegram chat (fallback)."""
     token   = os.getenv("TELEGRAM_BOT_TOKEN")
     chat_id = _current_chat_id or os.getenv("TELEGRAM_CHAT_ID")
     if not token or not chat_id:
