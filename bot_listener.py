@@ -35,6 +35,9 @@ from interview_trainer import (
     generate_scenario, evaluate_response, analyze_conversation,
     QUESTION_TYPES, INDUSTRIES, DIFFICULTY_LEVELS, MBTI_COACHING,
     get_daily_tip, generate_job_questions, generate_job_tips,
+    parse_resume, calculate_cv_health, format_cv_health_message,
+    generate_salary_benchmark, parse_salary_input,
+    extract_job_from_url,
 )
 from utils import (
     load_stats, save_stats,
@@ -43,6 +46,7 @@ from utils import (
     load_setup_session, save_setup_session, clear_setup_session,
     load_jobs, save_jobs,
     load_addjob_session, save_addjob_session, clear_addjob_session,
+    load_cv_text, save_cv_text,
     send_telegram,
 )
 
@@ -240,6 +244,16 @@ def handle_setup_start(intro: bool = True):
     send_telegram(msg, reply_markup={"inline_keyboard": keyboard})
 
 
+def _finish_salary_step(profile: dict, expected_salary: str):
+    """背景 thread：生成薪酬 benchmark，然後進入 MBTI 步。"""
+    benchmark = generate_salary_benchmark(
+        profile.get("job_title", "未指定職位"), expected_salary, profile.get("industry", "")
+    )
+    send_telegram(f"💰 HK 市場薪酬參考（2026）\n\n{benchmark}")
+    save_setup_session({"state": "setup_mbti"})
+    send_mbti_keyboard()
+
+
 def send_mbti_keyboard():
     """顯示 MBTI 選擇鍵盤（4×4）。"""
     keyboard = []
@@ -252,6 +266,108 @@ def send_mbti_keyboard():
         "唔識做 MBTI 測試？👉 https://www.16personalities.com/ch",
         reply_markup={"inline_keyboard": keyboard},
     )
+
+
+def handle_document(document: dict):
+    """處理用戶上傳嘅 resume（PDF / DOCX）。"""
+    mime  = document.get("mime_type", "")
+    fname = document.get("file_name", "").lower()
+
+    is_pdf  = mime == "application/pdf" or fname.endswith(".pdf")
+    is_docx = mime == "application/vnd.openxmlformats-officedocument.wordprocessingml.document" \
+              or fname.endswith(".docx")
+
+    if not is_pdf and not is_docx:
+        send_telegram("⚠️ 請上傳 PDF 或 Word (.docx) 格式嘅 resume。")
+        return
+
+    send_telegram("📄 收到 resume！AI 分析緊，稍等⋯⋯")
+
+    token = os.getenv("TELEGRAM_BOT_TOKEN")
+    file_info = requests.get(
+        f"https://api.telegram.org/bot{token}/getFile",
+        params={"file_id": document["file_id"]}, timeout=10,
+    ).json()
+    if not file_info.get("ok"):
+        send_telegram("❌ 下載失敗，請重試。")
+        return
+
+    file_url   = f"https://api.telegram.org/file/bot{token}/{file_info['result']['file_path']}"
+    file_bytes = requests.get(file_url, timeout=30).content
+
+    resume_text = ""
+    try:
+        if is_pdf:
+            import pdfplumber, io
+            with pdfplumber.open(io.BytesIO(file_bytes)) as pdf:
+                resume_text = "\n".join(p.extract_text() or "" for p in pdf.pages)
+        else:
+            import docx, io
+            doc = docx.Document(io.BytesIO(file_bytes))
+            parts = [p.text for p in doc.paragraphs if p.text.strip()]
+            for table in doc.tables:
+                for row in table.rows:
+                    row_text = "  |  ".join(c.text.strip() for c in row.cells if c.text.strip())
+                    if row_text:
+                        parts.append(row_text)
+            resume_text = "\n".join(parts)
+    except Exception as e:
+        send_telegram(f"❌ 解析文件失敗：{e}\n請確保唔係掃描版圖片 PDF。")
+        return
+
+    if not resume_text.strip():
+        send_telegram("⚠️ 未能提取文字，可能係掃描版 PDF。請試用文字版 PDF 或 .docx。")
+        return
+
+    parsed = parse_resume(resume_text)
+    if not parsed:
+        send_telegram("❌ AI 分析失敗，請重試。")
+        return
+
+    save_cv_text(resume_text)
+    profile = load_profile()
+    if parsed.get("job_title"):       profile["job_title"] = parsed["job_title"]
+    if parsed.get("industry"):        profile["industry"]  = parsed["industry"]
+    if parsed.get("exp_years"):       profile["exp_years"] = str(parsed["exp_years"])
+    if parsed.get("current_company"): profile["company"]   = parsed["current_company"]
+    if parsed.get("key_skills"):      profile["key_skills"] = parsed["key_skills"]
+    if parsed.get("education"):       profile["education"]  = parsed["education"]
+
+    health = calculate_cv_health(resume_text)
+    profile["cv_health_score"] = health["total"]
+    save_profile(profile)
+
+    lines = [
+        "✅ *Resume 分析完成！*\n",
+        f"📝 {parsed.get('summary', '')}",
+        "",
+        f"🎯 職位：{parsed.get('job_title', '未識別')}",
+        f"🏭 行業：{parsed.get('industry', '未識別')}",
+        f"⏱️ 年資：{parsed.get('exp_years', '?')} 年",
+    ]
+    if parsed.get("current_company"): lines.append(f"🏢 公司：{parsed['current_company']}")
+    if parsed.get("key_skills"):      lines.append(f"🛠️ 技能：{parsed['key_skills']}")
+    if parsed.get("education"):       lines.append(f"🎓 學歷：{parsed['education']}")
+
+    setup = load_setup_session()
+    onboarding = bool(setup) and setup.get("state") == "setup_cv_upload"
+
+    if not onboarding:
+        lines.append("\n面試練習會根據你嘅背景個人化！")
+    send_telegram("\n".join(lines))
+    send_telegram(format_cv_health_message(health))
+
+    if onboarding:
+        save_setup_session({"state": "setup_salary"})
+        send_telegram("💰 仲有最後一步！你目標月薪期望大概係幾多？（例如：38000 或 38K）")
+    else:
+        send_telegram(
+            "繼續做咩？",
+            reply_markup={"inline_keyboard": [[
+                {"text": "🎯 立即練習", "callback_data": "practice_new"},
+                {"text": "⚙️ 修改設定",  "callback_data": "do_setup"},
+            ]]}
+        )
 
 
 # ── Drill 選單 ────────────────────────────────────────────────────
@@ -325,6 +441,42 @@ def handle_user_response(user_text: str):
 
 
 # ── Job Application Tracker ───────────────────────────────────────
+
+def _auto_add_job_from_url(url: str):
+    """後台：fetch URL → 抽取 company/role/jd → 自動 save job。"""
+    from datetime import date as _date
+    info = extract_job_from_url(url)
+    company = info.get("company", "").strip()
+    role    = info.get("role", "").strip()
+    jd      = info.get("jd", "").strip()
+
+    if not company or not role:
+        send_telegram(
+            "⚠️ 未能自動讀取職位資料（可能需要登入或頁面受保護）。\n\n"
+            "用 /addjob 手動新增，貼上公司、職位同 JD。"
+        )
+        return
+
+    jobs   = load_jobs()
+    new_id = (max(j["id"] for j in jobs) + 1) if jobs else 1
+    jobs.append({
+        "id":           new_id,
+        "company":      company,
+        "role":         role,
+        "jd":           jd,
+        "link":         url,
+        "applied_date": str(_date.today()),
+        "status":       "Applied",
+    })
+    save_jobs(jobs)
+    send_telegram(
+        f"✅ 已自動新增申請！\n\n"
+        f"🏢 {company}\n"
+        f"💼 {role}\n"
+        f"📅 {_date.today()}  |  狀態：Applied\n\n"
+        f"用 /listjobs 睇詳情或更新狀態。"
+    )
+
 
 def handle_addjob_start():
     clear_addjob_session()
@@ -438,6 +590,19 @@ def handle_callback(cb: dict):
         handle_tip()
 
     elif data == "do_setup":
+        answer_callback(cb["id"])
+        clear_setup_session()
+        handle_setup_start(intro=False)
+
+    elif data == "onboard_cv":
+        answer_callback(cb["id"])
+        save_setup_session({"state": "setup_cv_upload"})
+        send_telegram(
+            "📄 請直接將你嘅 CV 拖入呢個 chat（PDF 或 Word .docx）。\n\n"
+            "AI 會自動分析你嘅背景，然後開始個人化練習！"
+        )
+
+    elif data == "onboard_manual":
         answer_callback(cb["id"])
         clear_setup_session()
         handle_setup_start(intro=False)
@@ -566,9 +731,20 @@ def cmd(text: str, command: str) -> bool:
     return text == command or text.startswith(command + "@") or text.startswith(command + " ")
 
 
+def _is_job_url(text: str) -> bool:
+    t = text.strip()
+    return bool(re.match(r"https?://\S+", t)) and len(t.split()) == 1
+
+
 def handle_message(text: str):
-    # ── Add Job session ──
+    # ── URL 全自動 add：fetch → DeepSeek 抽取 → 直接 save ──────────
     addjob = load_addjob_session()
+    if not addjob and _is_job_url(text):
+        send_telegram("🔗 收到職位 link，正在讀取職位資料...")
+        threading.Thread(target=_auto_add_job_from_url, args=(text.strip(),), daemon=True).start()
+        return
+
+    # ── Add Job session ──
     if addjob and not text.startswith("/"):
         state = addjob.get("state")
 
@@ -580,7 +756,30 @@ def handle_message(text: str):
             return
 
         if state == "addjob_role":
-            addjob["role"]  = text.strip()
+            addjob["role"] = text.strip()
+            # 如果 link 已預填（由 URL quick-add 觸發），直接 save，跳過 JD + link 步驟
+            if addjob.get("link"):
+                from datetime import date as _date
+                jobs   = load_jobs()
+                new_id = (max(j["id"] for j in jobs) + 1) if jobs else 1
+                jobs.append({
+                    "id":           new_id,
+                    "company":      addjob.get("company", ""),
+                    "role":         addjob["role"],
+                    "jd":           "",
+                    "link":         addjob["link"],
+                    "applied_date": str(_date.today()),
+                    "status":       "Applied",
+                })
+                save_jobs(jobs)
+                clear_addjob_session()
+                send_telegram(
+                    f"✅ 已新增申請！\n\n"
+                    f"🏢 {addjob.get('company')} — {addjob['role']}\n"
+                    f"📅 {_date.today()}  |  狀態：Applied\n\n"
+                    f"用 /listjobs 更新狀態或生成面試問題。"
+                )
+                return
             addjob["state"] = "addjob_jd"
             save_addjob_session(addjob)
             send_telegram(
@@ -644,8 +843,22 @@ def handle_message(text: str):
             profile = load_profile()
             profile["job_title"] = text.strip()
             save_profile(profile)
-            save_setup_session({"state": "setup_mbti"})
-            send_mbti_keyboard()
+            save_setup_session({"state": "setup_salary"})
+            send_telegram("💰 仲有最後一步！你目標月薪期望大概係幾多？（例如：38000 或 38K）")
+            return
+
+        if state == "setup_salary":
+            profile = load_profile()
+            expected_salary = parse_salary_input(text)
+            profile["expected_salary"] = expected_salary
+            profile["salary_currency"] = "HKD"
+            save_profile(profile)
+            send_telegram("💰 分析緊薪酬市場數據⋯⋯")
+            threading.Thread(
+                target=_finish_salary_step,
+                args=(profile, expected_salary),
+                daemon=True,
+            ).start()
             return
 
         if state == "setup_mbti":
@@ -698,13 +911,21 @@ def handle_message(text: str):
     if cmd(text, "/help") or cmd(text, "/start"):
         profile = load_profile()
         if not profile.get("job_title") and not profile.get("industry"):
-            handle_setup_start(intro=True)
+            send_telegram(
+                "👋 歡迎！AI 面試教練幫你針對練習，提升面試表現。\n\n"
+                "首先設定你嘅背景，練習會更貼近你嘅實際情況：",
+                reply_markup={"inline_keyboard": [
+                    [{"text": "📄 上傳 CV（PDF / DOCX）", "callback_data": "onboard_cv"}],
+                    [{"text": "✏️ 自己輸入背景",          "callback_data": "onboard_manual"}],
+                ]}
+            )
             return
         send_telegram(
             "🎓 AI 面試教練\n\n"
             "━━ 求職追蹤 ━━\n"
             "/addjob — 新增求職申請記錄\n"
-            "/listjobs — 查看所有申請 + 狀態（可生成題目 / Tips / 練習）\n\n"
+            "/listjobs — 查看所有申請 + 狀態（可生成題目 / Tips / 練習）\n"
+            "📊 CRM Kanban：https://sales-trainer-jatucpwszxyvoq5kpt7bav.streamlit.app\n\n"
             "━━ 面試練習 ━━\n"
             "/practice — 隨機面試練習\n"
             "/practice 初級／中級／高級 — 指定難度\n"
@@ -813,8 +1034,12 @@ def poll():
                 if "callback_query" in update:
                     handle_callback(update["callback_query"])
                 elif "message" in update:
-                    text = update["message"].get("text", "").strip()
-                    if text:
+                    document = update["message"].get("document")
+                    text     = update["message"].get("text", "").strip()
+                    if document:
+                        log.info(f"收到 document: {document.get('file_name','')!r}")
+                        threading.Thread(target=handle_document, args=(document,), daemon=True).start()
+                    elif text:
                         log.info(f"收到: {text[:60]!r}")
                         handle_message(text)
 

@@ -18,6 +18,8 @@ from interview_trainer import (
     get_daily_tip, parse_resume,
     generate_job_questions, generate_job_tips,
     generate_cover_letter_from_jd, generate_tailored_cv_content, build_cv_docx,
+    calculate_cv_health, format_cv_health_message,
+    generate_salary_benchmark, parse_salary_input,
 )
 from utils import (
     load_stats, save_stats,
@@ -425,7 +427,7 @@ def handle_document(document: dict):
         send_telegram("❌ AI 分析失敗，請重試。")
         return
 
-    # 4. 儲存 CV 全文 + 更新 profile
+    # 4. 儲存 CV 全文 + 更新 profile + CV Health Score
     save_cv_text(resume_text)
     profile = load_profile() or {}
     if parsed.get("job_title"):       profile["job_title"] = parsed["job_title"]
@@ -434,6 +436,9 @@ def handle_document(document: dict):
     if parsed.get("current_company"): profile["company"]   = parsed["current_company"]
     if parsed.get("key_skills"):      profile["key_skills"] = parsed["key_skills"]
     if parsed.get("education"):       profile["education"]  = parsed["education"]
+
+    health = calculate_cv_health(resume_text)
+    profile["cv_health_score"] = health["total"]
     save_profile(profile)
 
     # 5. 回覆確認
@@ -448,15 +453,27 @@ def handle_document(document: dict):
     if parsed.get("current_company"): lines.append(f"🏢 公司：{parsed['current_company']}")
     if parsed.get("key_skills"):      lines.append(f"🛠️ 技能：{parsed['key_skills']}")
     if parsed.get("education"):       lines.append(f"🎓 學歷：{parsed['education']}")
-    lines.append("\n面試練習會根據你嘅背景個人化！")
 
-    send_telegram(
-        "\n".join(lines),
-        reply_markup={"inline_keyboard": [[
-            {"text": "🎯 立即練習", "callback_data": "practice_new"},
-            {"text": "⚙️ 修改設定",  "callback_data": "setup_start"},
-        ]]}
-    )
+    setup = load_setup_session()
+    onboarding = bool(setup) and setup.get("state") == "setup_cv_upload"
+
+    if not onboarding:
+        lines.append("\n面試練習會根據你嘅背景個人化！")
+    send_telegram("\n".join(lines))
+    send_telegram(format_cv_health_message(health))
+
+    # 6. Onboarding 中 → 繼續落 Salary Benchmark 步；獨立上傳 → 顯示練習／設定按鈕
+    if onboarding:
+        save_setup_session({"state": "setup_salary"})
+        send_telegram("💰 仲有最後一步！你目標月薪期望大概係幾多？（例如：38000 或 38K）")
+    else:
+        send_telegram(
+            "繼續做咩？",
+            reply_markup={"inline_keyboard": [[
+                {"text": "🎯 立即練習", "callback_data": "practice_new"},
+                {"text": "⚙️ 修改設定",  "callback_data": "setup_start"},
+            ]]}
+        )
 
 
 # ── Drill ─────────────────────────────────────────────────────────
@@ -920,6 +937,7 @@ def handle_callback(cb):
         start_practice(force_qtype=qtype_name)
 
     elif data == "onboard_cv":
+        save_setup_session({"state": "setup_cv_upload"})
         send_telegram(
             "📄 請直接將你嘅 CV 拖入呢個 chat（PDF 或 Word .docx）。\n\n"
             "AI 會自動分析你嘅背景，然後開始個人化練習！"
@@ -1171,6 +1189,21 @@ def handle_message(text):
             profile = load_profile() or {}
             profile["job_title"] = text.strip()
             save_profile(profile)
+            save_setup_session({"state": "setup_salary"})
+            send_telegram("💰 仲有最後一步！你目標月薪期望大概係幾多？（例如：38000 或 38K）")
+            return
+
+        if state == "setup_salary":
+            profile = load_profile() or {}
+            expected_salary = parse_salary_input(text)
+            profile["expected_salary"]  = expected_salary
+            profile["salary_currency"]  = "HKD"
+            save_profile(profile)
+            send_telegram("💰 分析緊薪酬市場數據⋯⋯")
+            benchmark = generate_salary_benchmark(
+                profile.get("job_title", "未指定職位"), expected_salary, profile.get("industry", "")
+            )
+            send_telegram(f"💰 HK 市場薪酬參考（2026）\n\n{benchmark}")
             save_setup_session({"state": "setup_mbti"})
             send_mbti_keyboard()
             return
