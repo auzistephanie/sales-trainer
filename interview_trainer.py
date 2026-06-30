@@ -936,6 +936,32 @@ def calculate_cv_health(cv_text: str) -> dict:
     }
 
 
+def format_cv_health_message(health: dict) -> str:
+    """將 calculate_cv_health() 嘅 dict 結果砌成 Telegram 訊息（webhook.py / bot_listener.py 共用）。"""
+    lines = [f"📋 CV 基礎評分：{health['total']}/100", ""]
+    if health["sections_present"]:
+        lines.append(f"✅ 有：{'、'.join(health['sections_present'])}")
+    if health["weak_points"]:
+        lines.append(f"⚠️ 薄弱：{'；'.join(health['weak_points'])}")
+    if health["sections_missing"]:
+        lines.append(f"❌ 缺：{'、'.join(health['sections_missing'])}")
+    lines.append("")
+    lines.append(f"💡 建議：{health['suggestion']}")
+    return "\n".join(lines)
+
+
+def parse_salary_input(text: str) -> str:
+    """從自由文字提取月薪數字，支援 38k／$38,000／HK$38000 等格式；解析唔到就原文返回。"""
+    cleaned = (text or "").replace(",", "").upper()
+    m = re.search(r"(\d+(?:\.\d+)?)\s*K\b", cleaned)
+    if m:
+        return str(int(float(m.group(1)) * 1000))
+    m = re.search(r"\d{3,}", cleaned)
+    if m:
+        return m.group(0)
+    return (text or "").strip()
+
+
 # ── HK Salary Benchmark ──────────────────────────────────────────
 
 def generate_salary_benchmark(role: str, expected_salary: str, industry: str = "") -> str:
