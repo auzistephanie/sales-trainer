@@ -1,6 +1,7 @@
 """AI 面試教練引擎：題目池、場景 DNA、MBTI coaching、AI 評估。"""
 
 import random
+import re
 import os
 from openai import OpenAI
 from pathlib import Path
@@ -849,3 +850,272 @@ def build_cv_docx(cv_data: dict, company: str, role: str) -> bytes:
     buf = io.BytesIO()
     doc.save(buf)
     return buf.getvalue()
+
+
+# ── CV Health Score（本地計算，唔需要 AI）──────────────────────────
+
+CV_ACTION_VERBS = [
+    "led", "managed", "developed", "implemented", "increased", "reduced", "improved",
+    "designed", "built", "launched", "optimized", "achieved", "delivered", "coordinated",
+    "trained", "analyzed", "negotiated", "generated", "streamlined", "oversaw",
+]
+
+CV_KEYWORDS_GENERIC = [
+    "stakeholder", "P&L", "KPI", "ROI", "SOP", "budget", "cross-functional",
+    "project management", "data-driven", "client relations", "business development",
+    "operations", "compliance", "reporting", "strategy",
+]
+
+CV_SECTION_PATTERNS = {
+    "Summary":   r"summary|個人簡介|自我簡介|profile",
+    "Work Exp":  r"work experience|employment|專業經驗|工作經驗|experience",
+    "Skills":    r"skills|技能|專長|core competenc",
+    "Education": r"education|學歷|教育背景",
+}
+
+
+def calculate_cv_health(cv_text: str) -> dict:
+    """本地計算 CV Health Score（0-100，4 個維度：結構／量化成就／Action Verbs／關鍵詞），即時、唔需要 call AI。"""
+    text = cv_text or ""
+    lower = text.lower()
+
+    # 1. 結構完整性（25）
+    present, missing = [], []
+    for name, pattern in CV_SECTION_PATTERNS.items():
+        (present if re.search(pattern, lower) else missing).append(name)
+    structure_score = max(0, 25 - len(missing) * 6)
+
+    # 2. 量化成就（25）
+    quant_count = len(re.findall(r"\d+(?:\.\d+)?%|\d{2,}", text))
+    if quant_count >= 5:   quant_score = 25
+    elif quant_count >= 3: quant_score = 18
+    elif quant_count >= 1: quant_score = 10
+    else:                  quant_score = 0
+
+    # 3. Action Verbs（25）
+    verb_count = sum(1 for v in CV_ACTION_VERBS if re.search(rf"\b{v}\b", lower))
+    if verb_count >= 8:   verb_score = 25
+    elif verb_count >= 5: verb_score = 18
+    elif verb_count >= 3: verb_score = 10
+    else:                 verb_score = 5
+
+    # 4. 關鍵詞豐富度（25，對比 preset keyword list）
+    matched_keywords = [k for k in CV_KEYWORDS_GENERIC if k.lower() in lower]
+    keyword_score = round(len(matched_keywords) / len(CV_KEYWORDS_GENERIC) * 25)
+
+    total = structure_score + quant_score + verb_score + keyword_score
+
+    weak_points = []
+    if quant_score < 18:
+        weak_points.append(f"量化成就少（只有 {quant_count} 個數字／%）")
+    if verb_score < 18:
+        weak_points.append(f"強動詞少（只有 {verb_count} 個）")
+    if keyword_score < 18:
+        weak_points.append(f"行業關鍵詞唔夠（只有 {len(matched_keywords)} 個）")
+
+    suggestions = []
+    if missing:
+        suggestions.append(f"補齊缺少嘅 {'／'.join(missing)} 部分")
+    if quant_score < 18:
+        suggestions.append("為成就加返具體數字或百分比")
+    if verb_score < 18:
+        suggestions.append("多用強動詞開頭（如 led／achieved／optimized）")
+    suggestion = "；".join(suggestions[:2]) or "結構同內容都唔錯，可以再針對目標職位微調用詞。"
+
+    return {
+        "total": total,
+        "structure_score": structure_score,
+        "quant_score": quant_score,
+        "verb_score": verb_score,
+        "keyword_score": keyword_score,
+        "sections_present": present,
+        "sections_missing": missing,
+        "weak_points": weak_points,
+        "matched_keywords": matched_keywords,
+        "suggestion": suggestion,
+    }
+
+
+# ── HK Salary Benchmark ──────────────────────────────────────────
+
+def generate_salary_benchmark(role: str, expected_salary: str, industry: str = "") -> str:
+    """生成 HK 薪酬市場參考（DeepSeek）。"""
+    ai_client = OpenAI(api_key=DEEPSEEK_API_KEY, base_url="https://api.deepseek.com")
+    industry = industry or "通用"
+
+    prompt = f"""你係 HK 職場薪酬顧問。根據香港 2026 年勞動市場，為以下職位提供薪酬參考：
+
+職位：{role}
+行業：{industry}
+用戶期望月薪：HK${expected_salary}
+
+請輸出：
+1. 該職位 Junior / Mid / Senior 三個等級嘅市場薪酬範圍（HK$/月）
+2. 用戶期望係偏低 / 合理 / 偏高（對比 Mid level）
+3. 談判建議：開價策略（例：開幾多，最終落幾多）
+4. 如果偏低，建議提高到幾多
+
+格式簡潔，用繁體中文，唔超過 150 字。"""
+
+    try:
+        resp = ai_client.chat.completions.create(
+            model="deepseek-chat",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.5,
+            max_tokens=500,
+        )
+        return resp.choices[0].message.content
+    except Exception as e:
+        return f"⚠️ 生成失敗：{e}"
+
+
+# ── ATS Match Score ───────────────────────────────────────────────
+
+def calculate_ats_score(jd_text: str, cv_text: str) -> dict:
+    """抽取 JD 關鍵詞（DeepSeek），對比 CV 文本（本地比對），計算 ATS Match Score。"""
+    ai_client = OpenAI(api_key=DEEPSEEK_API_KEY, base_url="https://api.deepseek.com")
+
+    prompt = f"""從以下 JD 抽出 15-20 個最重要嘅關鍵詞（skills, tools, qualifications, job-specific terms）。
+只輸出詞語清單，逗號分隔，唔加解釋。
+
+JD:
+{(jd_text or "")[:2500]}"""
+
+    try:
+        resp = ai_client.chat.completions.create(
+            model="deepseek-chat",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.3,
+            max_tokens=300,
+        )
+        raw = resp.choices[0].message.content
+    except Exception as e:
+        return {"score": 0, "matched": [], "missing": [], "improvement": f"⚠️ 抽取關鍵詞失敗：{e}"}
+
+    keywords = [k.strip() for k in raw.replace("\n", ",").split(",") if k.strip()]
+    cv_lower = (cv_text or "").lower()
+
+    matched = [k for k in keywords if k.lower() in cv_lower]
+    missing = [k for k in keywords if k not in matched]
+    score = round(len(matched) / len(keywords) * 100) if keywords else 0
+
+    if missing:
+        improvement = f"建議喺 CV 加入：{', '.join(missing[:3])}"
+    else:
+        improvement = "CV 已涵蓋大部分關鍵詞！"
+
+    return {"score": score, "matched": matched, "missing": missing, "improvement": improvement}
+
+
+# ── 薪酬談判 Role-play ────────────────────────────────────────────
+
+def generate_negotiate_response(offer_details: str, user_message: str, round_num: int, history: list = None) -> str:
+    """薪酬談判 role-play：HR 角色自然回應 + 即時技巧評分。history 係 [{"user":.., "hr":..}, ...]。"""
+    ai_client = OpenAI(api_key=DEEPSEEK_API_KEY, base_url="https://api.deepseek.com")
+    history = history or []
+
+    history_text = ""
+    if history:
+        lines = []
+        for h in history:
+            if h.get("user"): lines.append(f"候選人：{h['user']}")
+            if h.get("hr"):   lines.append(f"HR：{h['hr']}")
+        history_text = "【之前對話】\n" + "\n".join(lines) + "\n\n"
+
+    prompt = f"""你係一間香港公司嘅 HR Manager，正在同候選人進行薪酬談判。
+Offer details：{offer_details}
+你嘅立場：維護公司利益，但可以在合理範圍內加薪最多 10-15%。
+第 {round_num} 回合。
+
+{history_text}候選人講：{user_message}
+
+請：
+1. 以 HR 身份自然回應（廣東話夾英文）
+2. 回應後用分隔線「━━━━━━━━━━」，評分候選人呢句說話：
+   - 技巧評分：X/10
+   - 優點：[1句]
+   - 改善：[1句，如有]"""
+
+    try:
+        resp = ai_client.chat.completions.create(
+            model="deepseek-chat",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.8,
+            max_tokens=600,
+        )
+        return resp.choices[0].message.content
+    except Exception as e:
+        return f"⚠️ 回應失敗：{e}"
+
+
+def generate_negotiate_summary(history: list) -> str:
+    """談判結束後嘅總結評分。history 係 [{"user":.., "hr":..}, ...]。"""
+    ai_client = OpenAI(api_key=DEEPSEEK_API_KEY, base_url="https://api.deepseek.com")
+
+    lines = []
+    for h in history or []:
+        if h.get("user"): lines.append(f"候選人：{h['user']}")
+        if h.get("hr"):   lines.append(f"HR：{h['hr']}")
+    transcript = "\n".join(lines) or "（無對話記錄）"
+
+    prompt = f"""你係資深薪酬談判教練，根據以下完整談判對話，給出總結評分。
+
+【談判對話記錄】
+{transcript}
+
+【輸出格式——廣東話口語】
+
+💼 談判總結
+整體表現：[X/10]
+
+✅ 做得好：[2-3點]
+⚠️ 下次注意：[1-2點]
+💡 最強嘅一句：「[引用候選人說過嘅最佳回應]」
+建議最終 counter-offer：HK$[XXK]"""
+
+    try:
+        resp = ai_client.chat.completions.create(
+            model="deepseek-chat",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.6,
+            max_tokens=600,
+        )
+        return resp.choices[0].message.content
+    except Exception as e:
+        return f"⚠️ 總結失敗：{e}"
+
+
+# ── 面試後覆盤分析 ────────────────────────────────────────────────
+
+def generate_debrief(job_info: dict, debrief_text: str) -> str:
+    """根據用戶描述嘅真實面試過程，提供專業覆盤分析。job_info 可為 None（未連結特定工）。"""
+    ai_client = OpenAI(api_key=DEEPSEEK_API_KEY, base_url="https://api.deepseek.com")
+    job_info = job_info or {}
+    job_title = job_info.get("role", "")
+    company   = job_info.get("company", "")
+    job_line  = f"{job_title}（{company}）" if job_title else "（未指定職位）"
+
+    prompt = f"""你係一位香港職場面試教練。根據以下面試描述，提供專業分析。
+
+職位：{job_line}
+面試描述：{debrief_text}
+
+請輸出：
+1. 整體表現評級：A / B+ / B / C（附 1 句理由）
+2. 強項（✅）：2-3 點
+3. 改善點（⚠️）：2-3 點，每點附具體改善方法
+4. 最值得注意嘅一個 moment：正面或需改善
+5. 下次策略：2 句
+
+用繁體中文，語氣直接務實。"""
+
+    try:
+        resp = ai_client.chat.completions.create(
+            model="deepseek-chat",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.6,
+            max_tokens=900,
+        )
+        return resp.choices[0].message.content
+    except Exception as e:
+        return f"⚠️ 分析失敗：{e}"
