@@ -5,3 +5,6 @@ flask
 upstash-redis
 pdfplumber
 python-docx
+google-api-python-client
+google-auth
+google-auth-httplib2
