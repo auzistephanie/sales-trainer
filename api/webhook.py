@@ -20,6 +20,7 @@ from interview_trainer import (
     generate_cover_letter_from_jd, generate_tailored_cv_content, build_cv_docx,
     calculate_cv_health, format_cv_health_message,
     generate_salary_benchmark, parse_salary_input,
+    generate_negotiate_response, generate_negotiate_summary, extract_negotiate_reply,
 )
 from utils import (
     load_stats, save_stats,
@@ -1239,6 +1240,40 @@ def handle_message(text):
         ]]})
         return
 
+    if state == "negotiate_start" and not text.startswith("/"):
+        session["offer_details"] = text.strip()
+        session["round_num"]     = 0
+        session["history"]       = []
+        session["state"]         = "negotiate_session"
+        save_session(session)
+        send_telegram(
+            "✅ Offer 已記錄！而家你可以開始同 HR 傾，打你想講嘅第一句：",
+            reply_markup={"inline_keyboard": [[{"text": "🏁 結束談判", "callback_data": "negotiate_end"}]]}
+        )
+        return
+
+    if state == "negotiate_session":
+        if text.strip() == "結束" or cmd(text, "/negotiate"):
+            send_telegram("📊 生成談判總結⋯⋯")
+            summary = generate_negotiate_summary(session.get("history", []))
+            send_telegram(summary, reply_markup={"inline_keyboard": [[
+                {"text": "🎯 繼續練習", "callback_data": "practice_new"},
+            ]]})
+            clear_session()
+            return
+
+        round_num = session.get("round_num", 0) + 1
+        history   = session.get("history", [])
+        reply = generate_negotiate_response(session.get("offer_details", ""), text.strip(), round_num, history)
+        history.append({"user": text.strip(), "hr": extract_negotiate_reply(reply)})
+        session["round_num"] = round_num
+        session["history"]   = history
+        save_session(session)
+        send_telegram(reply, reply_markup={"inline_keyboard": [[
+            {"text": "🏁 結束談判", "callback_data": "negotiate_end"},
+        ]]})
+        return
+
     # Commands
     if cmd(text, "/start") or cmd(text, "/help"):
         profile = load_profile()
@@ -1261,7 +1296,8 @@ def handle_message(text):
             "/practice — 隨機面試練習\n"
             "/practice 初級／中級／高級 — 指定難度\n"
             "/drill — 針對特定題型練習\n"
-            "/review — 貼真實面試答案，AI 分析\n\n"
+            "/review — 貼真實面試答案，AI 分析\n"
+            "/negotiate — 薪酬談判 role-play\n\n"
             "📊 *統計*\n"
             "/stats — 我的進度\n"
             "/streak — 練習連續天數\n"
@@ -1305,6 +1341,14 @@ def handle_message(text):
         send_telegram(
             "📋 貼上你嘅真實面試問答記錄，AI 幫你分析失分點：\n\n"
             "（格式：面試官問：xxx\n我答：xxx）"
+        )
+        return
+
+    if cmd(text, "/negotiate"):
+        save_session({"state": "negotiate_start"})
+        send_telegram(
+            "🤝 薪酬談判練習\n\n貼你收到嘅 offer details（職位、公司、提供月薪、其他 package）：",
+            reply_markup={"inline_keyboard": [[{"text": "❌ 取消", "callback_data": "negotiate_cancel"}]]}
         )
         return
 
