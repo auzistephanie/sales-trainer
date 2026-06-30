@@ -535,8 +535,12 @@ def handle_listjobs():
                 {"text": "💡 Key Tips",  "callback_data": f"job_tips_{job['id']}"},
             ],
             [
-                {"text": "🎯 練習",          "callback_data": f"job_practice_{job['id']}"},
-                {"text": "📊 更新狀態",      "callback_data": f"job_updatestatus_{job['id']}"},
+                {"text": "🎯 練習",     "callback_data": f"job_practice_{job['id']}"},
+                {"text": "📊 更新狀態", "callback_data": f"job_updatestatus_{job['id']}"},
+            ],
+            [
+                {"text": "📄 Cover Letter", "callback_data": f"job_cl_{job['id']}"},
+                {"text": "📋 Tailored CV",  "callback_data": f"job_cv_{job['id']}"},
             ],
         ]
         send_telegram("\n".join(lines), reply_markup={"inline_keyboard": kb})
@@ -567,6 +571,56 @@ def handle_job_tips(job_id: str):
         {"text": "❓ 睇面試問題", "callback_data": f"job_q_{job_id}"},
         {"text": "🎯 練習",       "callback_data": f"job_practice_{job_id}"},
     ]]})
+
+
+def handle_job_cover_letter(job_id: str):
+    jobs = load_jobs()
+    job  = next((j for j in jobs if j["id"] == job_id), None)
+    if not job:
+        send_telegram("⚠️ 搵唔到呢個申請記錄。")
+        return
+    cv_text = load_cv_text()
+    if not cv_text:
+        send_telegram("⚠️ 未有你嘅 CV 記錄。請先上傳 CV（PDF/.docx）到 bot。")
+        return
+    send_telegram(f"✍️ 根據你嘅 CV 生成 *{job['company']}* Cover Letter⋯⋯")
+    result = generate_cover_letter_from_jd(cv_text, job.get("jd",""), job["company"], job["role"])
+    send_telegram(
+        f"📄 *Cover Letter — {job['company']}*\n_{job['role']}_\n\n{result}",
+        reply_markup={"inline_keyboard": [[
+            {"text": "📋 生成 Tailored CV", "callback_data": f"job_cv_{job_id}"},
+            {"text": "🔄 重新生成",          "callback_data": f"job_cl_{job_id}"},
+        ]]}
+    )
+
+
+def handle_job_tailored_cv(job_id: str):
+    jobs = load_jobs()
+    job  = next((j for j in jobs if j["id"] == job_id), None)
+    if not job:
+        send_telegram("⚠️ 搵唔到呢個申請記錄。")
+        return
+    cv_text = load_cv_text()
+    if not cv_text:
+        send_telegram("⚠️ 未有你嘅 CV 記錄。請先上傳 CV（PDF/.docx）到 bot。")
+        return
+    send_telegram(f"🛠️ 生成 *{job['company']}* Tailored CV 緊，約 15 秒⋯⋯")
+    cv_data = generate_tailored_cv_content(cv_text, job.get("jd",""), job["company"], job["role"])
+    if not cv_data:
+        send_telegram("❌ 生成失敗，請重試。")
+        return
+    try:
+        docx_bytes = build_cv_docx(cv_data, job["company"], job["role"])
+        filename   = f"CV_{job['company'].replace(' ','_')[:20]}_{job['role'].replace(' ','_')[:15]}.docx"
+        send_document(docx_bytes, filename, caption=f"📋 Tailored CV for {job['role']} @ {job['company']}")
+        send_telegram(
+            "✅ Tailored CV 已生成！",
+            reply_markup={"inline_keyboard": [[
+                {"text": "📄 生成 Cover Letter", "callback_data": f"job_cl_{job_id}"},
+            ]]}
+        )
+    except Exception as e:
+        send_telegram(f"❌ 生成 .docx 失敗：{e}")
 
 
 def handle_job_questions_from_jd(sess: dict):
@@ -914,6 +968,12 @@ def handle_callback(cb):
         if addjob:
             addjob["link"] = ""
             _save_addjob_final(addjob)
+
+    elif data.startswith("job_cl_"):
+        handle_job_cover_letter(data[7:])
+
+    elif data.startswith("job_cv_"):
+        handle_job_tailored_cv(data[7:])
 
     elif data.startswith("job_q_"):
         handle_job_questions(data[6:])
