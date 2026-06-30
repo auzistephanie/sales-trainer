@@ -2,7 +2,14 @@
 
 from __future__ import annotations
 
+import os
 import streamlit as st
+
+# Inject Streamlit Cloud secrets into env vars so utils.py / interview_trainer.py 的 os.getenv() 正常工作
+for _k in ("UPSTASH_REDIS_REST_URL", "UPSTASH_REDIS_REST_TOKEN", "DEEPSEEK_API_KEY"):
+    if _k in st.secrets and not os.getenv(_k):
+        os.environ[_k] = st.secrets[_k]
+
 from datetime import date, datetime
 
 from utils import load_jobs, save_jobs
