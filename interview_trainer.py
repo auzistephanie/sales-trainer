@@ -1119,6 +1119,11 @@ Offer details：{offer_details}
         return f"⚠️ 回應失敗：{e}"
 
 
+def extract_negotiate_reply(ai_text: str) -> str:
+    """從 generate_negotiate_response() 嘅輸出中抽取淨 HR 回應部分（去除評分），用於下一回合嘅 history context。"""
+    return (ai_text or "").split("━━━━━━━━━━")[0].strip()
+
+
 def generate_negotiate_summary(history: list) -> str:
     """談判結束後嘅總結評分。history 係 [{"user":.., "hr":..}, ...]。"""
     ai_client = OpenAI(api_key=DEEPSEEK_API_KEY, base_url="https://api.deepseek.com")
