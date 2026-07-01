@@ -116,19 +116,17 @@ Redis key `interview_setup_session`（onboarding 專用，另一個獨立 sessio
 - 每日 bonus：免費 1 次額外練習
 - `FREE_SESSION_LIMIT = 5`（bot_listener.py）
 
-## ⚠️ Bot Runtime — 而家有兩套喺度打交（2026-07-01 發現）
+## Bot Runtime — 正式決定用 Vercel webhook（2026-07-01）
 
-**真正接單嘅係 Vercel webhook，唔係 `bot_listener.py`：**
+**真正接單嘅係 Vercel webhook：**
 - Telegram 一個 bot 只能夠揀 **webhook** 或者 **long-polling（`getUpdates`）** 其中一種，唔可以同時用
-- `getWebhookInfo` 查到而家有 webhook 設定緊指去 `https://sales-trainer-wheat.vercel.app/api/webhook`（`api/webhook.py`）—— 呢個先係實際回覆緊 Telegram 用戶嘅版本
-- `bot_listener.py` 嘅本地 LaunchAgent（`com.salestrainer.bot.plist`）一直嘗試 `getUpdates`，但因為 webhook 已經設定咗，Telegram 會拒絕/reset 佢嘅連線 —— `bot.log` 見到不斷 `Connection reset by peer`，呢個唔係 bug，係兩套 runtime 衝突嘅正常結果
-- **改完 `bot_listener.py` 嘅 code 唔會生效**，除非你打算切返用 local polling（要先 `deleteWebhook`）；而家改嘢應該全部改 `api/webhook.py` 先會喺 Telegram 度睇到
+- Webhook 設定指去 `https://sales-trainer-wheat.vercel.app/api/webhook`（`api/webhook.py`）—— 呢個係實際回覆緊 Telegram 用戶嘅版本
+- **`bot_listener.py` 本地 daemon 已經停用**：LaunchAgent 由 `~/Library/LaunchAgents/com.salestrainer.bot.plist` 搬咗去 `~/Library/LaunchAgents/_disabled/com.salestrainer.bot.plist.disabled`（冇刪，想翻用就搬返去 + `launchctl load`），確保唔會下次開機自動翻生同 Telegram 打交
+- **改嘢一律改 `api/webhook.py`**，`bot_listener.py` 淨係留低做 code 參考／將來想切換返 local 時嘅底稿，唔會再自動運行
 
 **部署 / 更新流程（Vercel）：**
 - Push 去 GitHub main branch → Vercel 自動 rebuild + redeploy `api/webhook.py`
-- **但指令 menu（Telegram 個 `/` 快捷鍵清單）唔會自動更新** —— 淨係喺你手動探訪 `https://sales-trainer-wheat.vercel.app/api/set_webhook` 先會執行 `setMyCommands`。**每次加/改 bot 指令之後，記得探訪呢個 URL 一次**，唔係 Telegram 個 menu 會同 code 唔同步（好似今日噉，加咗 `/negotiate` `/debrief` `/mbti` 但 menu 舊咗成日都冇人發現）
-
-**`bot_listener.py` 依家嘅角色未決定** —— 到底係淘汰、定係關咗 webhook 轉返用佢做主力，仲未有結論，暫時佢會繼續存在同繼續打交（唔影響 Vercel 版正常運作，淨係自己不斷 error）。
+- **指令 menu（Telegram 個 `/` 快捷鍵清單）唔會自動更新** —— 淨係喺手動探訪 `https://sales-trainer-wheat.vercel.app/api/set_webhook` 先會執行 `setMyCommands`。**每次加/改 bot 指令之後，記得探訪呢個 URL 一次**，唔係 Telegram 個 menu 會同 code 唔同步（好似 2026-07-01 噉，加咗 `/negotiate` `/debrief` `/mbti` 但 menu 舊咗成日都冇人發現）
 
 ## GitHub Push
 - 用 GitHub API 直接 push，唔用 git CLI（避免 lock file 問題）
@@ -143,3 +141,4 @@ Redis key `interview_setup_session`（onboarding 專用，另一個獨立 sessio
 - **2026-06-29**：新增 Job Application Tracker — /addjob, /listjobs, AI 面試問題、Key Tips、status tracking（Applied/Phone Screen/Interview/Offer/Rejected）
 - **2026-07-01**：CV Health Score、HK Salary Benchmark onboarding、ATS Match Score（Tailored CV 生成後自動顯示）、`/negotiate` 薪酬談判 role-play、`/debrief` 面試後覆盤分析。`bot_listener.py` 同步補齊 CV 上傳基建（之前得 `api/webhook.py` 有）。詳見 `FEATURE_SPEC.md`
 - **2026-07-01**：發現 `bot_listener.py`（local polling）同 Vercel webhook 一直喺度衝突 —— Telegram webhook 已設定，真正接單嘅係 `api/webhook.py`，`bot_listener.py` 嘅 `getUpdates` 一直畀 Telegram reset。順手發現指令 menu 淨係喺手動探訪 `/api/set_webhook` 先會更新，補做咗一次同步
+- **2026-07-01**：正式決定唔用 local —— 停咗 `bot_listener.py` 嘅 LaunchAgent（搬去 `_disabled/`），Vercel webhook 做唯一 runtime
