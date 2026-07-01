@@ -102,15 +102,20 @@ def register_commands():
         {"command": "review",     "description": "貼真實面試答案，AI 分析失分點"},
         {"command": "negotiate",  "description": "薪酬談判 role-play"},
         {"command": "debrief",    "description": "面試後覆盤分析"},
+        {"command": "mbti",       "description": "做 MBTI 檢測 / 直接輸入 MBTI"},
         {"command": "setup",      "description": "設定我的目標職位 + MBTI"},
         {"command": "mystatus",   "description": "查看我的設定"},
         {"command": "help",       "description": "指令說明"},
     ]
-    requests.post(
-        f"https://api.telegram.org/bot{token}/setMyCommands",
-        json={"commands": commands},
-        timeout=10,
-    )
+    try:
+        requests.post(
+            f"https://api.telegram.org/bot{token}/setMyCommands",
+            json={"commands": commands},
+            timeout=10,
+        )
+    except requests.RequestException as e:
+        # 網絡問題唔應該累到成個 daemon 開機失敗 —— 記低錯誤，continue 落 poll loop
+        log.error(f"register_commands 失敗（唔阻住開機）: {e}")
 
 
 # ── 統計記錄 ──────────────────────────────────────────────────────
