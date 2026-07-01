@@ -739,15 +739,16 @@ def generate_cover_letter_from_jd(cv_text: str, jd_text: str, company: str, role
     """根據 CV 全文 + JD，生成針對性 Cover Letter（英文，約 150 字）。"""
     ai_client = OpenAI(api_key=DEEPSEEK_API_KEY, base_url="https://api.deepseek.com")
 
-    prompt = f"""You are an expert cover letter writer for the Hong Kong job market with 10+ years experience.
-Write a tailored, ATS-friendly cover letter for the following job application.
+    prompt = f"""You are an expert cover letter writer for the Hong Kong job market.
+Write a VERY SHORT, tailored, ATS-friendly cover letter.
 
-CRITICAL RULES:
-1. Use ONLY facts, achievements, employers and skills that appear in the candidate's actual CV — NEVER fabricate experience, numbers, employers or titles.
-2. Mirror the exact keywords and phrasing from the Job Description wherever the CV genuinely supports them (ATS optimisation).
-3. Be specific — cite real achievements/metrics from the CV, not generic filler like "team player" or "hard-working".
-4. Keep company names, job titles and dates exactly as written in the CV.
-5. Match tone to the role and industry; confident but not boastful.
+#1 HARD RULE — LENGTH: The BODY (everything between the greeting and "Yours sincerely") must be 120–150 words. NEVER exceed 150 words. Exactly 2 short paragraphs. If a sentence is not essential, delete it. A long letter is a FAILURE.
+
+Other rules:
+- Use ONLY facts/achievements/employers/skills from the candidate's actual CV — NEVER fabricate anything.
+- Mirror the Job Description's key words where the CV supports them (ATS).
+- Cite 1–2 real, specific achievements/metrics — no generic filler ("team player", "hard-working", "passionate").
+- Keep company names, titles and dates exactly as in the CV.
 
 【Applicant's CV】
 {cv_text[:3500]}
@@ -758,19 +759,20 @@ Role: {role}
 Job Description:
 {jd_text[:2500]}
 
-【Output requirements】
-- Length: SHORT — 2 tight paragraphs, ~150 words total (hard cap 170). Recruiters skim; every sentence must earn its place.
-- Para 1: Who you are + the specific role/company + your single strongest qualification matched to their top need (use JD keywords)
-- Para 2: 1–2 concrete achievements from the CV matched to JD requirements + a brief why-this-company + confident call to action
-- No filler, no restating the whole CV. Plain text only, no markdown, ready to paste into an email
-- Sign off with exactly: Yours sincerely,\n[Your Name]"""
+【Structure】
+- Greeting: "Dear Hiring Manager,"
+- Para 1 (2–3 sentences): who you are + the exact role/company + your single strongest matching qualification.
+- Para 2 (2–3 sentences): one concrete achievement matched to a JD requirement + brief why-this-company + a one-line call to action.
+- Plain text only, no markdown.
+- Sign off with exactly: Yours sincerely,\n[Your Name]
+REMEMBER: body ≤ 150 words. Count before you finish."""
 
     try:
         resp = ai_client.chat.completions.create(
             model="deepseek-chat",
             messages=[{"role": "user", "content": prompt}],
-            temperature=0.35,
-            max_tokens=500,
+            temperature=0.3,
+            max_tokens=350,
         )
         return resp.choices[0].message.content
     except Exception as e:
