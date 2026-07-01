@@ -129,11 +129,12 @@ Redis key `interview_setup_session`（onboarding 專用，另一個獨立 sessio
 - **指令 menu（Telegram 個 `/` 快捷鍵清單）唔會自動更新** —— 淨係喺手動探訪 `https://sales-trainer-wheat.vercel.app/api/set_webhook` 先會執行 `setMyCommands`。**每次加/改 bot 指令之後，記得探訪呢個 URL 一次**，唔係 Telegram 個 menu 會同 code 唔同步（好似 2026-07-01 噉，加咗 `/negotiate` `/debrief` `/mbti` 但 menu 舊咗成日都冇人發現）
 
 ## GitHub Push
-- 用 GitHub API 直接 push，唔用 git CLI（避免 lock file 問題）
+- 用 GitHub Git Data API 直接 push，唔用 git CLI（避免 lock file 問題）
 - 指令：`python3 github_push.py "<commit message>"`
 - `.env` 需要：`GITHUB_TOKEN` + `GITHUB_REPO=auzistephanie/sales-trainer`
 - **規則：每次改完檔案，Claude 必須自動 push，唔需要 Stephanie 另外要求**
 - commit message 要具體描述改動（唔好用 "update files"）
+- ⚠️ **一次 run = 一個 commit**（2026-07-02 重寫）：舊版用 Contents API 逐個檔案 PUT，一次 push 整十幾個 commit → 十幾個 Vercel deployment，2026-07-02 爆咗 Vercel 免費 plan「100 deployments/日」上限（`api-deployments-free-per-day`）。新版用 Git Data API 砌一個 tree + 一個 commit，無論改幾多檔案都只觸發一次 build。**唔好喺短時間內連環 push**，慳返 deployment 額度
 
 ## 改版歷史
 - **2026-06-23**：初版創建，銷售話術訓練，10 種拒絕類型
