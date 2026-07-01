@@ -51,7 +51,7 @@ FREE_SESSION_LIMIT = 5
 UPGRADE_MSG = (
     "🎓 你已完成 {n} 次免費練習！\n\n"
     "升級 Premium 解鎖無限練習 + 詳細進度分析：\n"
-    "👉 [加入等候名單](https://t.me/hkinterviewbot)（暫定 $68/月）\n\n"
+    "👉 [加入等候名單](https://t.me/salestraineraubot)（暫定 $68/月）\n\n"
     "或者繼續試用，每日送 1 次額外練習 🎁"
 )
 
@@ -666,6 +666,8 @@ def handle_job_tailored_cv(job_id: str):
         profile = load_profile() or {}
         send_telegram(format_ats_message(ats, profile.get("cv_health_score")))
         job["ats_score"] = ats.get("score")
+        if drive_link:
+            job["cv_drive_link"] = drive_link
         save_jobs(jobs)
     except Exception as e:
         send_telegram(f"❌ 生成 .docx 失敗：{e}")
@@ -842,6 +844,8 @@ def handle_jd_tailored_cv():
         profile = load_profile() or {}
         send_telegram(format_ats_message(ats, profile.get("cv_health_score")))
         sess["ats_score"] = ats.get("score")
+        if drive_link:
+            sess["cv_drive_link"] = drive_link
         save_jd_session(sess)
     except Exception as e:
         send_telegram(f"❌ 生成 .docx 失敗：{e}")
@@ -863,7 +867,8 @@ def handle_jd_add_to_tracker():
         "link":         sess.get("url", ""),
         "applied_date": datetime.now().strftime("%Y-%m-%d"),
         "status":       "Applied",
-        "ats_score":    sess.get("ats_score"),
+        "ats_score":      sess.get("ats_score"),
+        "cv_drive_link":  sess.get("cv_drive_link"),
     }
     jobs.append(job)
     save_jobs(jobs)

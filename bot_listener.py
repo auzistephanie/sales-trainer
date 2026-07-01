@@ -59,7 +59,7 @@ FREE_SESSION_LIMIT = 5
 UPGRADE_MSG = (
     "🎓 你已完成 {n} 次免費練習！\n\n"
     "升級 Premium 解鎖無限練習 + 詳細進度分析：\n"
-    "👉 [加入等候名單](https://t.me/hkinterviewbot)（暫定 $68/月）\n\n"
+    "👉 [加入等候名單](https://t.me/salestraineraubot)（暫定 $68/月）\n\n"
     "或者繼續試用，每日送 1 次額外練習 🎁"
 )
 

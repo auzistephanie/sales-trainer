@@ -101,6 +101,9 @@ else:
                     if j.get("jd"):
                         st.text_area("JD", j["jd"], height=100, disabled=True, key=f"jd_{j['id']}")
 
+                    if j.get("cv_drive_link"):
+                        st.markdown(f"📎 [Tailored CV（Drive）]({j['cv_drive_link']})")
+
                     if j.get("cv_file"):
                         st.caption(f"📎 已發 CV：{j['cv_file']}")
 
@@ -134,7 +137,7 @@ else:
                         with st.spinner("生成中..."):
                             st.markdown(generate_job_tips(j))
 
-                    b4.markdown("[🤖 Bot 練習](https://t.me/SalesTrainerAIBot)")
+                    b4.markdown("[🤖 Bot 練習](https://t.me/salestraineraubot)")
 
 st.divider()
 
