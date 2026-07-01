@@ -174,10 +174,11 @@ def record_score(qtype_name: str, score: int):
 
 
 def check_free_limit() -> bool:
-    data  = load_stats()
-    total = data.get("total_sessions", 0)
-    today_bonus = data.get("today_bonus_date") == datetime.now().strftime("%Y-%m-%d")
-    return total < FREE_SESSION_LIMIT or today_bonus
+    return True  # 限制已停用（Stephanie 自用，2026-07-01）— 想重開俾其他用戶：復原返落面呢兩行
+    # data  = load_stats()
+    # total = data.get("total_sessions", 0)
+    # today_bonus = data.get("today_bonus_date") == datetime.now().strftime("%Y-%m-%d")
+    # return total < FREE_SESSION_LIMIT or today_bonus
 
 
 def use_daily_bonus():
