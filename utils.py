@@ -147,9 +147,11 @@ def upload_to_drive(file_bytes: bytes, filename: str) -> str:
             _io2.BytesIO(file_bytes),
             mimetype="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         )
-        f = svc.files().create(body=meta, media_body=media, fields="id").execute()
+        f = svc.files().create(body=meta, media_body=media, fields="id",
+                               supportsAllDrives=True).execute()
         fid = f.get("id")
-        svc.permissions().create(fileId=fid, body={"type": "anyone", "role": "reader"}).execute()
+        svc.permissions().create(fileId=fid, body={"type": "anyone", "role": "reader"},
+                                 supportsAllDrives=True).execute()
         return f"https://drive.google.com/file/d/{fid}/view"
     except Exception as e:
         print(f"upload_to_drive failed: {e}")
