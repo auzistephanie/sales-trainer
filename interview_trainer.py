@@ -650,7 +650,7 @@ def parse_resume(resume_text: str) -> dict:
     prompt = f"""你係一個 HR 專家，分析以下 resume 內容，提取結構化資訊。
 
 【Resume 內容】
-{resume_text[:3500]}
+{resume_text[:6000]}
 
 【輸出格式——只輸出 JSON，唔要任何其他文字，唔要 markdown code block】
 {{
