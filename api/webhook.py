@@ -752,21 +752,27 @@ def fetch_jd_via_jina(url: str) -> str:
     - 有 JINA_API_KEY 就用（免費層 rate limit 好鬆），冇都照跑
     - 加一次 retry
     """
-    headers = {"Accept": "text/plain", "X-Return-Format": "markdown"}
     jina_key = os.environ.get("JINA_API_KEY", "").strip()
-    if jina_key:
-        headers["Authorization"] = f"Bearer {jina_key}"
-
+    # 被 Cloudflare / 反爬擋嘅頁面特徵 —— 抓到呢啲當失敗
+    block_signs = (
+        "just a moment", "error 403", "403: forbidden", "attention required",
+        "enable javascript and cookies", "checking your browser", "cf-chl",
+        "returned error 4", "returned error 5",
+    )
     for attempt in range(2):
+        headers = {"Accept": "text/plain", "X-Return-Format": "markdown"}
+        if jina_key:
+            headers["Authorization"] = f"Bearer {jina_key}"
+        # 第二次用 browser engine（有 key 先啟用），可過部分 Cloudflare 挑戰
+        if attempt == 1 and jina_key:
+            headers["X-Engine"] = "browser"
         try:
-            resp = req.get(
-                f"https://r.jina.ai/{url}",
-                headers=headers,
-                timeout=45,
-            )
-            if resp.ok and len(resp.text.strip()) > 200:
-                return resp.text[:4000]
-            print(f"[jina fetch] attempt {attempt+1} status={resp.status_code} len={len(resp.text.strip())}")
+            resp = req.get(f"https://r.jina.ai/{url}", headers=headers, timeout=45)
+            text = resp.text.strip()
+            low  = text[:600].lower()
+            if resp.ok and len(text) > 200 and not any(s in low for s in block_signs):
+                return text[:4000]
+            print(f"[jina fetch] attempt {attempt+1} status={resp.status_code} len={len(text)} blocked={any(s in low for s in block_signs)}")
         except Exception as e:
             print(f"[jina fetch] attempt {attempt+1} {e}")
     return ""
@@ -792,6 +798,16 @@ def handle_url_message(url: str):
     info = extract_company_role(jd_text)
     company_guess = info.get("company", "")
     role_guess    = info.get("role", "")
+
+    # 抽唔到 company 同 role（例如被擋、內容係雜訊）→ 當抓唔到，叫貼 JD
+    if not company_guess and not role_guess:
+        save_jd_session({"state": "waiting_jd_text", "url": url})
+        send_telegram(
+            "⚠️ 呢個網站擋咗自動抓取（或者要登入）\n\n"
+            "請直接貼上 JD 文字，我幫你繼續：",
+            reply_markup={"inline_keyboard": [[{"text": "❌ 取消", "callback_data": "jd_cancel"}]]}
+        )
+        return
 
     save_jd_session({
         "state":   "jd_ready",
