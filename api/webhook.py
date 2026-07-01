@@ -22,6 +22,7 @@ from interview_trainer import (
     generate_salary_benchmark, parse_salary_input,
     generate_negotiate_response, generate_negotiate_summary, extract_negotiate_reply,
     generate_debrief,
+    calculate_ats_score, format_ats_message,
 )
 from utils import (
     load_stats, save_stats,
@@ -661,6 +662,9 @@ def handle_job_tailored_cv(job_id: str):
                     {"text": "📄 生成 Cover Letter", "callback_data": f"job_cl_{job_id}"},
                 ]]}
             )
+        ats = calculate_ats_score(job.get("jd", ""), cv_text)
+        profile = load_profile() or {}
+        send_telegram(format_ats_message(ats, profile.get("cv_health_score")))
     except Exception as e:
         send_telegram(f"❌ 生成 .docx 失敗：{e}")
 
@@ -832,6 +836,9 @@ def handle_jd_tailored_cv():
                     [{"text": "➕ 加入申請追蹤",      "callback_data": "jd_add_to_tracker"}],
                 ]}
             )
+        ats = calculate_ats_score(sess.get("jd_text", ""), cv_text)
+        profile = load_profile() or {}
+        send_telegram(format_ats_message(ats, profile.get("cv_health_score")))
     except Exception as e:
         send_telegram(f"❌ 生成 .docx 失敗：{e}")
 

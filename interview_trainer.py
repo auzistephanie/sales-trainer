@@ -1078,6 +1078,28 @@ JD:
     return {"score": score, "matched": matched, "missing": missing, "improvement": improvement}
 
 
+def format_ats_message(ats: dict, cv_health_score: int = None) -> str:
+    """將 calculate_ats_score() 嘅 dict 結果砌成 Telegram 訊息，附帶對比 CV Health baseline 嘅 delta。"""
+    score = ats.get("score", 0)
+    delta_text = ""
+    if cv_health_score is not None:
+        delta = score - cv_health_score
+        delta_text = f"（比你原本 CV 高 +{delta} 分 ✅）" if delta > 0 else "（需改善 ⚠️）"
+
+    matched = ats.get("matched", [])
+    missing = ats.get("missing", [])
+
+    lines = [f"📊 ATS Match Score：{score}/100{delta_text}", ""]
+    if matched:
+        lines.append(f"✅ 匹配關鍵詞（{len(matched)} 個）：{', '.join(matched)}")
+    if len(missing) >= 3:
+        lines.append(f"⚠️ 缺漏關鍵詞：{', '.join(missing)}")
+    lines.append("")
+    if ats.get("improvement"):
+        lines.append(f"💡 {ats['improvement']}")
+    return "\n".join(lines)
+
+
 # ── 薪酬談判 Role-play ────────────────────────────────────────────
 
 def generate_negotiate_response(offer_details: str, user_message: str, round_num: int, history: list = None) -> str:

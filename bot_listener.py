@@ -41,6 +41,7 @@ from interview_trainer import (
     generate_cover_letter_from_jd, generate_tailored_cv_content, build_cv_docx,
     generate_negotiate_response, generate_negotiate_summary, extract_negotiate_reply,
     generate_debrief,
+    calculate_ats_score, format_ats_message,
 )
 from utils import (
     load_stats, save_stats,
@@ -545,6 +546,11 @@ def _auto_add_job_from_url(url: str):
         docx_bytes = build_cv_docx(cv_data, company, role)
         filename   = f"CV_{company.replace(' ', '_')}_{role.replace(' ', '_')}.docx"
         send_document(docx_bytes, filename, caption=f"📄 Tailored CV — {role} @ {company}")
+
+    # 6. ATS Match Score
+    ats     = calculate_ats_score(jd, cv_text)
+    profile = load_profile()
+    send_telegram(format_ats_message(ats, profile.get("cv_health_score")))
 
 
 def handle_addjob_start():
