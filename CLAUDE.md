@@ -143,3 +143,8 @@ Redis key `interview_setup_session`（onboarding 專用，另一個獨立 sessio
 - **2026-07-01**：發現 `bot_listener.py`（local polling）同 Vercel webhook 一直喺度衝突 —— Telegram webhook 已設定，真正接單嘅係 `api/webhook.py`，`bot_listener.py` 嘅 `getUpdates` 一直畀 Telegram reset。順手發現指令 menu 淨係喺手動探訪 `/api/set_webhook` 先會更新，補做咗一次同步
 - **2026-07-01**：正式決定唔用 local —— 停咗 `bot_listener.py` 嘅 LaunchAgent（搬去 `_disabled/`），Vercel webhook 做唯一 runtime
 - **2026-07-01**：停用 5 次免費練習限制（Stephanie 自用）—— `check_free_limit()` 改為直接 return True，`api/webhook.py` + `bot_listener.py` 同步；`FREE_SESSION_LIMIT`/`UPGRADE_MSG` 同舊 logic 留底註解，日後想開返俾其他用戶隨時復原
+- **2026-07-02**：修 JobsDB 抓取失敗 —— 根因係 `fetch_jd_via_jina()`（`api/webhook.py`）`X-No-Cache:true`（強制慢 render）+ `timeout=15`（JobsDB 冷 render 成日過 15s，實測有條要 16.2s）。改為移除 X-No-Cache、`X-Return-Format=markdown`、`timeout=45`、加一次 retry、支援 optional `JINA_API_KEY`（有就用，加速 16.2s→1.5s + 鬆 rate limit）。⚠️ **Vercel 側要喺 dashboard 加環境變數 `JINA_API_KEY` 先生效**（`.env` 只影響 local）
+- **2026-07-02**：升級 CV / Cover Letter 質素 —— `generate_tailored_cv_content()` + `generate_cover_letter_from_jd()`（`interview_trainer.py`）搬入 `tailored-cv-generator` skill 嘅 CRITICAL RULES：唔准作假、鎖公司名/職稱/日期、ATS keyword tailoring、core competencies 6→8-12、bullets 3→4、summary 唔提學歷/語言、temperature 收緊（CV 0.4→0.3、CL 0.6→0.35）
+
+## 環境變數（`.env` + Vercel dashboard）
+`DEEPSEEK_API_KEY` · `UPSTASH_REDIS_REST_URL` · `UPSTASH_REDIS_REST_TOKEN` · `TELEGRAM_BOT_TOKEN` · `TELEGRAM_CHAT_ID` · `GITHUB_TOKEN` · `GITHUB_REPO` · `JINA_API_KEY`（optional，抓取加速）
