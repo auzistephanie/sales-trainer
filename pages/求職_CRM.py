@@ -185,7 +185,7 @@ else:
 
                     b1, b2, b3, b4 = st.columns(4)
 
-                    if b1.button("📄 CV Prompt", key=f"cv_{j['id']}"):
+                    if b1.button("📄", key=f"cv_{j['id']}", help="CV Prompt", use_container_width=True):
                         prompt = (
                             f"請用 tailored-cv-generator skill 幫我生成針對以下職位的 tailored CV：\n\n"
                             f"公司：{j.get('company', '')}\n"
@@ -195,24 +195,27 @@ else:
                         )
                         st.code(prompt, language=None)
 
-                    if b2.button("❓ 面試問題", key=f"q_{j['id']}"):
+                    if b2.button("❓", key=f"q_{j['id']}", help="面試問題", use_container_width=True):
                         with st.spinner("生成中..."):
                             st.markdown(generate_job_questions(j))
 
-                    if b3.button("💡 Key Tips", key=f"tips_{j['id']}"):
+                    if b3.button("💡", key=f"tips_{j['id']}", help="Key Tips", use_container_width=True):
                         with st.spinner("生成中..."):
                             st.markdown(generate_job_tips(j))
 
-                    b4.markdown("[🤖 Bot 練習](https://t.me/salestraineraubot)")
+                    b4.link_button(
+                        "🤖", "https://t.me/salestraineraubot",
+                        help="Bot 練習", use_container_width=True,
+                    )
 
                     with st.form(key=f"status_form_{j['id']}"):
-                        sc1, sc2 = st.columns([3, 1])
+                        sc1, sc2 = st.columns([4, 1])
                         new_status = sc1.selectbox(
                             "更新狀態", STAGE_ORDER,
                             index=STAGE_ORDER.index(status) if status in STAGE_ORDER else 0,
                             key=f"status_sel_{j['id']}", label_visibility="collapsed",
                         )
-                        if sc2.form_submit_button("更新"):
+                        if sc2.form_submit_button("✓", help="更新狀態", use_container_width=True):
                             for jj in jobs:
                                 if jj["id"] == j["id"]:
                                     jj["status"] = new_status
