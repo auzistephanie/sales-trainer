@@ -18,6 +18,7 @@ from interview_trainer import (
     get_daily_tip, parse_resume,
     generate_job_questions, generate_job_tips,
     generate_cover_letter_from_jd, generate_tailored_cv_content, build_cv_docx,
+    clean_jd_text, extract_company_role,
     calculate_cv_health, format_cv_health_message,
     generate_salary_benchmark, parse_salary_input,
     generate_negotiate_response, generate_negotiate_summary, extract_negotiate_reply,
@@ -786,15 +787,11 @@ def handle_url_message(url: str):
         )
         return
 
-    # 成功抓到，嘗試從文字識別公司/職位
-    lines = [l.strip() for l in jd_text.split("\n") if l.strip()]
-    company_guess = ""
-    role_guess    = ""
-    for l in lines[:10]:
-        if len(l) < 60 and not company_guess:
-            company_guess = l
-        elif len(l) < 80 and not role_guess:
-            role_guess = l
+    # 成功抓到 → 清走 Jina boilerplate，再用 DeepSeek 乾淨抽 company/role
+    jd_text = clean_jd_text(jd_text)
+    info = extract_company_role(jd_text)
+    company_guess = info.get("company", "")
+    role_guess    = info.get("role", "")
 
     save_jd_session({
         "state":   "jd_ready",
@@ -884,9 +881,9 @@ def handle_jd_tailored_cv():
             )
         else:
             # Fallback: send file directly
-            send_document(docx_bytes, filename, caption=f"📄 Tailored CV for {role} @ {company}")
+            send_document(docx_bytes, filename, caption=f"📄 Tailored CV — {role} @ {company}")
             send_telegram(
-                "✅ Tailored CV 已生成！（Drive 未設定，直接傳送）",
+                "✅ Tailored CV 已生成！",
                 reply_markup={"inline_keyboard": [
                     [{"text": "📄 生成 Cover Letter", "callback_data": "jd_cover_letter"}],
                     [{"text": "➕ 加入申請追蹤",      "callback_data": "jd_add_to_tracker"}],
