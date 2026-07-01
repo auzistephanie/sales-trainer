@@ -151,6 +151,7 @@ Redis key `interview_setup_session`（onboarding 專用，另一個獨立 sessio
   3. **Education 印 placeholder**（"not specified in CV"）：prompt 禁止填 placeholder、搵唔到就返 `[]`；`build_cv_docx` 加 `_valid_edu()` filter，冇有效學歷就唔印個 section
   4. **Drive fallback 訊息突兀**：「（Drive 未設定，直接傳送）」→「✅ Tailored CV 已生成！」
   - ⚠️ **Google Drive 上傳**：bot（Vercel）同 CV skill（Cowork）係兩套獨立系統。bot 要上 Drive 須喺 `.env` + Vercel 加 `GOOGLE_CREDENTIALS`（service account JSON）+ `GOOGLE_DRIVE_FOLDER_ID`；未設定就直接 Telegram 傳檔（`utils.upload_to_drive` fallback）
+- **2026-07-02**：開通 bot Drive 上傳 —— service account `cv-uploader@just-clover-487108-a0`、folder `1QMBJwdWBknIMVHxIDZs7i7u9oy0SQ6JY`（同 CV skill 共用）。加入 local `.env`（gitignored）。個 folder 係 **Shared Drive**，`utils.upload_to_drive` 之前冇 `supportsAllDrives=True` 會 404 File not found，已補上並實測上傳成功。⚠️ **Vercel dashboard 要自己加 `GOOGLE_CREDENTIALS`（單行 JSON）+ `GOOGLE_DRIVE_FOLDER_ID` 先會喺正式 bot 生效**
 
 ## 環境變數（`.env` + Vercel dashboard）
 `DEEPSEEK_API_KEY` · `UPSTASH_REDIS_REST_URL` · `UPSTASH_REDIS_REST_TOKEN` · `TELEGRAM_BOT_TOKEN` · `TELEGRAM_CHAT_ID` · `GITHUB_TOKEN` · `GITHUB_REPO` · `JINA_API_KEY`（optional，抓取加速）· `GOOGLE_CREDENTIALS` + `GOOGLE_DRIVE_FOLDER_ID`（optional，CV 上 Drive）
