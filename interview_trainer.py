@@ -687,34 +687,39 @@ def generate_cover_letter_from_jd(cv_text: str, jd_text: str, company: str, role
     """根據 CV 全文 + JD，生成針對性 Cover Letter（英文，約 280 字）。"""
     ai_client = OpenAI(api_key=DEEPSEEK_API_KEY, base_url="https://api.deepseek.com")
 
-    prompt = f"""You are an experienced HK HR consultant with 10+ years experience.
-Write a tailored, professional cover letter for the following job application.
+    prompt = f"""You are an expert cover letter writer for the Hong Kong job market with 10+ years experience.
+Write a tailored, ATS-friendly cover letter for the following job application.
+
+CRITICAL RULES:
+1. Use ONLY facts, achievements, employers and skills that appear in the candidate's actual CV — NEVER fabricate experience, numbers, employers or titles.
+2. Mirror the exact keywords and phrasing from the Job Description wherever the CV genuinely supports them (ATS optimisation).
+3. Be specific — cite real achievements/metrics from the CV, not generic filler like "team player" or "hard-working".
+4. Keep company names, job titles and dates exactly as written in the CV.
+5. Match tone to the role and industry; confident but not boastful.
 
 【Applicant's CV】
-{cv_text[:3000]}
+{cv_text[:3500]}
 
 【Target Job】
 Company: {company}
 Role: {role}
 Job Description:
-{jd_text[:2000]}
+{jd_text[:2500]}
 
-【Requirements】
-- Length: 3 paragraphs, ~280 words
-- Tone: professional but warm, confident
-- Para 1: Opening — who you are + why this specific role excites you
-- Para 2: Highlight 2-3 most relevant experiences/achievements that match the JD
-- Para 3: Why this company + call to action
-- Use specific details from both the CV and JD — no generic filler
-- Format: plain text, no markdown, ready to paste into email
-- Sign off with: Yours sincerely,\n[Your Name]"""
+【Output requirements】
+- Length: 3 tight paragraphs, ~280 words
+- Para 1: Who you are + the specific role/company + a hook tying your strongest relevant qualification to their need
+- Para 2: 2–3 most relevant achievements from the CV, each explicitly matched to a JD requirement (use JD keywords)
+- Para 3: Why this specific company (reference something concrete from the JD) + a confident call to action
+- Plain text only, no markdown, ready to paste into an email
+- Sign off with exactly: Yours sincerely,\n[Your Name]"""
 
     try:
         resp = ai_client.chat.completions.create(
             model="deepseek-chat",
             messages=[{"role": "user", "content": prompt}],
-            temperature=0.6,
-            max_tokens=800,
+            temperature=0.35,
+            max_tokens=900,
         )
         return resp.choices[0].message.content
     except Exception as e:
@@ -726,29 +731,38 @@ def generate_tailored_cv_content(cv_text: str, jd_text: str, company: str, role:
     import json as _json
     ai_client = OpenAI(api_key=DEEPSEEK_API_KEY, base_url="https://api.deepseek.com")
 
-    prompt = f"""You are an expert CV writer. Tailor the applicant's CV for this specific job.
+    prompt = f"""You are an expert ATS-optimised CV writer for the Hong Kong job market.
+Tailor the applicant's CV for this specific job.
+
+CRITICAL RULES:
+1. Use ONLY information from the candidate's actual CV — NEVER fabricate companies, titles, dates, metrics or skills.
+2. Keep all real job titles, company names and dates exactly as written in the CV.
+3. Tailor the summary and every bullet to naturally match the JD's keywords (ATS optimisation) — but only where the CV genuinely supports it.
+4. Core competencies: 8–12 items, mixing role-relevant hard skills AND tools/tech, drawn from the CV.
+5. Each experience bullet should be achievement-oriented (action verb + what + result), and quantified whenever the CV provides numbers.
+6. Do NOT mention degree/education or language ability inside the professional summary.
 
 【Original CV】
-{cv_text[:3000]}
+{cv_text[:3500]}
 
 【Target Job】
 Company: {company}
 Role: {role}
 JD:
-{jd_text[:2000]}
+{jd_text[:2500]}
 
 Output ONLY valid JSON (no markdown, no code block) with this exact structure:
 {{
   "name": "full name from CV",
   "contact": "email | phone | location (one line)",
-  "summary": "2-3 sentence professional summary tailored to this role (English)",
-  "core_competencies": ["skill 1", "skill 2", "skill 3", "skill 4", "skill 5", "skill 6"],
+  "summary": "3-4 sentence professional summary tailored to this role, no education/language mention (English)",
+  "core_competencies": ["8 to 12 skills mixing role-relevant hard skills and tools/tech"],
   "experience": [
     {{
-      "company": "company name",
+      "company": "full company name",
       "role": "job title",
       "period": "date range",
-      "bullets": ["bullet 1 tailored to JD", "bullet 2", "bullet 3"]
+      "bullets": ["4 achievement-oriented bullets, each matched to a JD requirement and quantified where possible"]
     }}
   ],
   "education": [
@@ -761,8 +775,8 @@ Output ONLY valid JSON (no markdown, no code block) with this exact structure:
         resp = ai_client.chat.completions.create(
             model="deepseek-chat",
             messages=[{"role": "user", "content": prompt}],
-            temperature=0.4,
-            max_tokens=1500,
+            temperature=0.3,
+            max_tokens=2200,
         )
         content = resp.choices[0].message.content.strip()
         content = content.replace("```json", "").replace("```", "").strip()
