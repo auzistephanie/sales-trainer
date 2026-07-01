@@ -6,7 +6,7 @@ from datetime import date, datetime
 
 import streamlit as st
 
-from utils import load_jobs, save_jobs
+from utils import load_jobs, save_jobs, load_profile
 from interview_trainer import generate_job_questions, generate_job_tips
 
 STAGE_ORDER = ["Applied", "Phone Screen", "1st Interview", "2nd Interview", "Offer", "Rejected"]
@@ -43,7 +43,8 @@ def reached_stage(job: dict, stage: str) -> bool:
 
 st.title("💼 求職 CRM")
 
-jobs = load_jobs()
+jobs    = load_jobs()
+profile = load_profile()
 
 # ── Metrics ──────────────────────────────────────────────────────────
 total = len(jobs)
@@ -54,12 +55,14 @@ pending = sum(
     1 for j in jobs
     if j.get("status") == "Applied" and days_since(j.get("applied_date", "")) > 7
 )
+cv_health = profile.get("cv_health_score")
 
-m1, m2, m3, m4 = st.columns(4)
+m1, m2, m3, m4, m5 = st.columns(5)
 m1.metric("總申請", total)
 m2.metric("面試中", interviewing)
 m3.metric("回覆率", response_rate)
 m4.metric("⚠️ 待跟進", pending, help="申請超過 7 日仍未有回覆")
+m5.metric("📋 CV Health", f"{cv_health}/100" if cv_health is not None else "—", help="喺 Telegram bot 上傳 CV 時計算")
 
 st.divider()
 
@@ -83,10 +86,14 @@ else:
                 badge = STATUS_BADGE.get(status, "⚪")
                 days = days_since(j.get("applied_date", ""))
                 stale = " ⚠️" if status == "Applied" and days > 7 else ""
-                label = f"{badge} {j.get('company', '?')} — {j.get('role', '?')}{stale}"
+                ats_score = j.get("ats_score")
+                ats_tag = f" 📊{ats_score}" if ats_score is not None else ""
+                label = f"{badge} {j.get('company', '?')} — {j.get('role', '?')}{ats_tag}{stale}"
 
                 with st.expander(label):
                     st.caption(f"申請日：{j.get('applied_date', '—')}  ·  {days} 日前  ·  {status}")
+                    if ats_score is not None:
+                        st.caption(f"📊 ATS Match Score：{ats_score}/100")
 
                     if j.get("link"):
                         st.markdown(f"[職位連結]({j['link']})")

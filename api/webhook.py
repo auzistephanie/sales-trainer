@@ -665,6 +665,8 @@ def handle_job_tailored_cv(job_id: str):
         ats = calculate_ats_score(job.get("jd", ""), cv_text)
         profile = load_profile() or {}
         send_telegram(format_ats_message(ats, profile.get("cv_health_score")))
+        job["ats_score"] = ats.get("score")
+        save_jobs(jobs)
     except Exception as e:
         send_telegram(f"❌ 生成 .docx 失敗：{e}")
 
@@ -839,6 +841,8 @@ def handle_jd_tailored_cv():
         ats = calculate_ats_score(sess.get("jd_text", ""), cv_text)
         profile = load_profile() or {}
         send_telegram(format_ats_message(ats, profile.get("cv_health_score")))
+        sess["ats_score"] = ats.get("score")
+        save_jd_session(sess)
     except Exception as e:
         send_telegram(f"❌ 生成 .docx 失敗：{e}")
 
@@ -859,6 +863,7 @@ def handle_jd_add_to_tracker():
         "link":         sess.get("url", ""),
         "applied_date": datetime.now().strftime("%Y-%m-%d"),
         "status":       "Applied",
+        "ats_score":    sess.get("ats_score"),
     }
     jobs.append(job)
     save_jobs(jobs)

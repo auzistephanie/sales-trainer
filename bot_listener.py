@@ -552,6 +552,13 @@ def _auto_add_job_from_url(url: str):
     profile = load_profile()
     send_telegram(format_ats_message(ats, profile.get("cv_health_score")))
 
+    jobs = load_jobs()
+    for j in jobs:
+        if j["id"] == new_id:
+            j["ats_score"] = ats.get("score")
+            break
+    save_jobs(jobs)
+
 
 def handle_addjob_start():
     clear_addjob_session()
