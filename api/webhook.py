@@ -21,6 +21,7 @@ from interview_trainer import (
     calculate_cv_health, format_cv_health_message,
     generate_salary_benchmark, parse_salary_input,
     generate_negotiate_response, generate_negotiate_summary, extract_negotiate_reply,
+    generate_debrief,
 )
 from utils import (
     load_stats, save_stats,
@@ -89,6 +90,14 @@ STATUS_EMOJI  = {
     "Offer":         "🎉",
     "Rejected":      "❌",
 }
+
+DEBRIEF_PROMPT = (
+    "請描述面試過程。包括：\n"
+    "- 問咗咩問題\n"
+    "- 你點答\n"
+    "- Interviewer 嘅反應\n"
+    "- 你覺得咩位答得唔好"
+)
 
 
 # ── 工具 ──────────────────────────────────────────────────────────
@@ -1071,6 +1080,17 @@ def handle_callback(cb):
         ]]})
         clear_session()
 
+    elif data == "debrief_job_skip":
+        save_session({"state": "debrief_input", "job_info": None})
+        send_telegram(DEBRIEF_PROMPT)
+
+    elif data.startswith("debrief_job_"):
+        job_id = data[len("debrief_job_"):]
+        jobs   = load_jobs()
+        job    = next((j for j in jobs if j["id"] == job_id), None)
+        save_session({"state": "debrief_input", "job_info": job})
+        send_telegram(DEBRIEF_PROMPT)
+
     elif data.startswith("job_status_"):
         # job_status_{id}_{status} — status 可能包含空格，所以 split 限3份
         parts  = data.split("_", 3)   # ["job", "status", id, status_value]
@@ -1304,6 +1324,20 @@ def handle_message(text):
         ]]})
         return
 
+    if state == "debrief_input" and not text.startswith("/"):
+        job_info = session.get("job_info")
+        clear_session()
+        send_telegram("🎙️ AI 分析緊你嘅面試表現⋯⋯")
+        result = generate_debrief(job_info, text.strip())
+        if job_info:
+            send_telegram(result)
+            handle_update_status_menu(job_info["id"])
+        else:
+            send_telegram(result, reply_markup={"inline_keyboard": [[
+                {"text": "🎯 繼續練習", "callback_data": "practice_new"},
+            ]]})
+        return
+
     # Commands
     if cmd(text, "/start") or cmd(text, "/help"):
         profile = load_profile()
@@ -1327,7 +1361,8 @@ def handle_message(text):
             "/practice 初級／中級／高級 — 指定難度\n"
             "/drill — 針對特定題型練習\n"
             "/review — 貼真實面試答案，AI 分析\n"
-            "/negotiate — 薪酬談判 role-play\n\n"
+            "/negotiate — 薪酬談判 role-play\n"
+            "/debrief — 面試後覆盤分析\n\n"
             "📊 *統計*\n"
             "/stats — 我的進度\n"
             "/streak — 練習連續天數\n"
@@ -1380,6 +1415,22 @@ def handle_message(text):
             "🤝 薪酬談判練習\n\n貼你收到嘅 offer details（職位、公司、提供月薪、其他 package）：",
             reply_markup={"inline_keyboard": [[{"text": "❌ 取消", "callback_data": "negotiate_cancel"}]]}
         )
+        return
+
+    if cmd(text, "/debrief"):
+        jobs = load_jobs()
+        if jobs:
+            kb = [
+                [{"text": f"{STATUS_EMOJI.get(j.get('status','Applied'),'')} {j['company']} — {j['role']}",
+                  "callback_data": f"debrief_job_{j['id']}"}]
+                for j in jobs
+            ]
+            kb.append([{"text": "⏭️ 跳過，唔連結特定工", "callback_data": "debrief_job_skip"}])
+            save_session({"state": "debrief_job_select"})
+            send_telegram("🎙️ 係邊份工嘅面試？", reply_markup={"inline_keyboard": kb})
+        else:
+            save_session({"state": "debrief_input", "job_info": None})
+            send_telegram(DEBRIEF_PROMPT)
         return
 
     if cmd(text, "/mbti"):
@@ -1500,6 +1551,7 @@ def set_webhook():
         {"command": "tip",      "description": "今日面試技巧"},
         {"command": "review",   "description": "貼真實面試答案，AI 分析"},
         {"command": "negotiate", "description": "薪酬談判 role-play"},
+        {"command": "debrief",  "description": "面試後覆盤分析"},
         {"command": "mbti",     "description": "做 MBTI 檢測 / 直接輸入 MBTI"},
         {"command": "setup",    "description": "設定目標職位 + MBTI"},
         {"command": "mystatus", "description": "查看我的設定"},
