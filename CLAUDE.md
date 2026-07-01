@@ -142,3 +142,4 @@ Redis key `interview_setup_session`（onboarding 專用，另一個獨立 sessio
 - **2026-07-01**：CV Health Score、HK Salary Benchmark onboarding、ATS Match Score（Tailored CV 生成後自動顯示）、`/negotiate` 薪酬談判 role-play、`/debrief` 面試後覆盤分析。`bot_listener.py` 同步補齊 CV 上傳基建（之前得 `api/webhook.py` 有）。詳見 `FEATURE_SPEC.md`
 - **2026-07-01**：發現 `bot_listener.py`（local polling）同 Vercel webhook 一直喺度衝突 —— Telegram webhook 已設定，真正接單嘅係 `api/webhook.py`，`bot_listener.py` 嘅 `getUpdates` 一直畀 Telegram reset。順手發現指令 menu 淨係喺手動探訪 `/api/set_webhook` 先會更新，補做咗一次同步
 - **2026-07-01**：正式決定唔用 local —— 停咗 `bot_listener.py` 嘅 LaunchAgent（搬去 `_disabled/`），Vercel webhook 做唯一 runtime
+- **2026-07-01**：停用 5 次免費練習限制（Stephanie 自用）—— `check_free_limit()` 改為直接 return True，`api/webhook.py` + `bot_listener.py` 同步；`FREE_SESSION_LIMIT`/`UPGRADE_MSG` 同舊 logic 留底註解，日後想開返俾其他用戶隨時復原
