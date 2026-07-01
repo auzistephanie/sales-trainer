@@ -640,6 +640,58 @@ def extract_job_from_url(url: str) -> dict:
         return {}
 
 
+def clean_jd_text(raw: str) -> str:
+    """清走 Jina Reader 嘅 boilerplate（Title:/URL Source:/Markdown Content:/導航），
+    淨返真正 JD 內容。用喺抓取之後、生成之前。"""
+    if not raw:
+        return ""
+    import re as _re
+    lines = raw.split("\n")
+    out = []
+    skip_prefixes = (
+        "title:", "url source:", "markdown content:", "skip to content",
+        "published time:", "warning:", "image ", "![",
+    )
+    for l in lines:
+        s = l.strip()
+        low = s.lower()
+        if not s:
+            continue
+        if low.startswith(skip_prefixes):
+            continue
+        # 淨係圖片/連結 markdown 行
+        if _re.fullmatch(r"[\[\]\(\)!].*", s) and "http" in low and len(s) < 120:
+            continue
+        out.append(s)
+    return "\n".join(out).strip()[:4000]
+
+
+def extract_company_role(jd_text: str) -> dict:
+    """用 DeepSeek 由 JD 文字乾淨抽出 {company, role}。抽唔到返空字串。"""
+    import json as _json
+    ai_client = OpenAI(api_key=DEEPSEEK_API_KEY, base_url="https://api.deepseek.com")
+    prompt = f"""從以下職位頁面內容，抽出公司名同職位名稱。
+只輸出 JSON，唔要任何其他文字或 markdown：
+{{"company": "公司名稱（英文原文，抽唔到就空字串）", "role": "職位名稱（英文原文，抽唔到就空字串）"}}
+
+【頁面內容】
+{jd_text[:2500]}"""
+    try:
+        r = ai_client.chat.completions.create(
+            model="deepseek-chat",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.0,
+            max_tokens=150,
+        )
+        content = r.choices[0].message.content.strip()
+        content = content.replace("```json", "").replace("```", "").strip()
+        d = _json.loads(content)
+        return {"company": d.get("company", "").strip(), "role": d.get("role", "").strip()}
+    except Exception as e:
+        print(f"[extract_company_role] 失敗：{e}")
+        return {"company": "", "role": ""}
+
+
 # ── Resume 解析 ───────────────────────────────────────────────────
 
 def parse_resume(resume_text: str) -> dict:
@@ -684,7 +736,7 @@ def parse_resume(resume_text: str) -> dict:
 # ── Cover Letter + Tailored CV 生成 ──────────────────────────────
 
 def generate_cover_letter_from_jd(cv_text: str, jd_text: str, company: str, role: str) -> str:
-    """根據 CV 全文 + JD，生成針對性 Cover Letter（英文，約 280 字）。"""
+    """根據 CV 全文 + JD，生成針對性 Cover Letter（英文，約 150 字）。"""
     ai_client = OpenAI(api_key=DEEPSEEK_API_KEY, base_url="https://api.deepseek.com")
 
     prompt = f"""You are an expert cover letter writer for the Hong Kong job market with 10+ years experience.
@@ -707,11 +759,10 @@ Job Description:
 {jd_text[:2500]}
 
 【Output requirements】
-- Length: 3 tight paragraphs, ~280 words
-- Para 1: Who you are + the specific role/company + a hook tying your strongest relevant qualification to their need
-- Para 2: 2–3 most relevant achievements from the CV, each explicitly matched to a JD requirement (use JD keywords)
-- Para 3: Why this specific company (reference something concrete from the JD) + a confident call to action
-- Plain text only, no markdown, ready to paste into an email
+- Length: SHORT — 2 tight paragraphs, ~150 words total (hard cap 170). Recruiters skim; every sentence must earn its place.
+- Para 1: Who you are + the specific role/company + your single strongest qualification matched to their top need (use JD keywords)
+- Para 2: 1–2 concrete achievements from the CV matched to JD requirements + a brief why-this-company + confident call to action
+- No filler, no restating the whole CV. Plain text only, no markdown, ready to paste into an email
 - Sign off with exactly: Yours sincerely,\n[Your Name]"""
 
     try:
@@ -719,7 +770,7 @@ Job Description:
             model="deepseek-chat",
             messages=[{"role": "user", "content": prompt}],
             temperature=0.35,
-            max_tokens=900,
+            max_tokens=500,
         )
         return resp.choices[0].message.content
     except Exception as e:
@@ -741,6 +792,7 @@ CRITICAL RULES:
 4. Core competencies: 8–12 items, mixing role-relevant hard skills AND tools/tech, drawn from the CV.
 5. Each experience bullet should be achievement-oriented (action verb + what + result), and quantified whenever the CV provides numbers.
 6. Do NOT mention degree/education or language ability inside the professional summary.
+7. Education: extract every school/degree/year found in the CV (even partial). If the CV genuinely has NO education info, return an empty list [] — NEVER write placeholder text like "not specified" or "N/A".
 
 【Original CV】
 {cv_text[:3500]}
@@ -896,10 +948,17 @@ def build_cv_docx(cv_data: dict, company: str, role: str) -> bytes:
             run.font.size = Pt(9)
         doc.add_paragraph().paragraph_format.space_after = Pt(4)
 
-    # ── Education ──
-    section_title("Education")
-    for edu in cv_data.get("education", []):
-        body(f"{edu.get('degree','')} — {edu.get('institution','')} {edu.get('year','')}", size=9)
+    # ── Education ── (冇學歷或係 placeholder 就唔印個 section)
+    def _valid_edu(e):
+        blob = f"{e.get('degree','')} {e.get('institution','')}".lower()
+        if not blob.strip():
+            return False
+        return not any(x in blob for x in ("not specified", "n/a", "未提供", "not provided"))
+    edu_list = [e for e in cv_data.get("education", []) if _valid_edu(e)]
+    if edu_list:
+        section_title("Education")
+        for edu in edu_list:
+            body(f"{edu.get('degree','')} — {edu.get('institution','')} {edu.get('year','')}", size=9)
 
     # ── Additional ──
     if cv_data.get("additional"):
