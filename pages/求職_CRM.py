@@ -64,6 +64,9 @@ m3.metric("回覆率", response_rate)
 m4.metric("⚠️ 待跟進", pending, help="申請超過 7 日仍未有回覆")
 m5.metric("📋 CV Health", f"{cv_health}/100" if cv_health is not None else "—", help="喺 Telegram bot 上傳 CV 時計算")
 
+if profile.get("expected_salary"):
+    st.caption(f"🎯 目標月薪：${profile['expected_salary']} {profile.get('salary_currency', 'HKD')}")
+
 st.divider()
 
 # ── Kanban ────────────────────────────────────────────────────────────
@@ -106,6 +109,19 @@ else:
 
                     if j.get("cv_file"):
                         st.caption(f"📎 已發 CV：{j['cv_file']}")
+
+                    negotiate_log = j.get("negotiate_log") or []
+                    if negotiate_log:
+                        latest = negotiate_log[-1]
+                        st.caption(f"🤝 談判練習：{len(negotiate_log)} 次（最近 {latest['date']}，{latest['rounds']} 回合）")
+
+                    debrief_log = j.get("debrief_log") or []
+                    if debrief_log:
+                        st.caption(f"🎙️ 覆盤分析：{len(debrief_log)} 次（最近 {debrief_log[-1]['date']}）")
+                        st.text_area(
+                            "最近一次覆盤內容", debrief_log[-1]["result"],
+                            height=120, disabled=True, key=f"debrief_{j['id']}",
+                        )
 
                     with st.form(key=f"cv_record_{j['id']}"):
                         cv_input = st.text_input("記低發出嘅 CV 版本", value=j.get("cv_file", ""), placeholder="例：CV_TransUnion_DataAnalyst.docx")

@@ -33,6 +33,7 @@ from utils import (
     load_jd_session, save_jd_session, clear_jd_session,
     load_jobs, save_jobs,
     load_addjob_session, save_addjob_session, clear_addjob_session,
+    load_negotiate_log, save_negotiate_log, load_debrief_log, save_debrief_log,
     send_telegram, send_document, upload_to_drive, set_current_chat_id,
     _redis_get, _redis_set, _redis_del,
 )
@@ -99,6 +100,41 @@ DEBRIEF_PROMPT = (
     "- Interviewer 嘅反應\n"
     "- 你覺得咩位答得唔好"
 )
+
+
+def _record_negotiate_summary(session: dict, summary: str):
+    """談判結束時記低結果：有連結 job 就存落 job["negotiate_log"]，冇就存落全局 log。"""
+    entry = {
+        "date":    datetime.now().strftime("%Y-%m-%d"),
+        "rounds":  session.get("round_num", 0),
+        "summary": summary,
+    }
+    job_id = session.get("job_id")
+    if job_id:
+        jobs = load_jobs()
+        job  = next((j for j in jobs if j["id"] == job_id), None)
+        if job:
+            job.setdefault("negotiate_log", []).append(entry)
+            save_jobs(jobs)
+            return
+    log = load_negotiate_log()
+    log.append(entry)
+    save_negotiate_log(log)
+
+
+def _record_debrief_result(job_info: dict, result: str):
+    """覆盤分析完記低結果：有連結 job 就存落 job["debrief_log"]，冇就存落全局 log。"""
+    entry = {"date": datetime.now().strftime("%Y-%m-%d"), "result": result}
+    if job_info:
+        jobs = load_jobs()
+        job  = next((j for j in jobs if j["id"] == job_info.get("id")), None)
+        if job:
+            job.setdefault("debrief_log", []).append(entry)
+            save_jobs(jobs)
+            return
+    log = load_debrief_log()
+    log.append(entry)
+    save_debrief_log(log)
 
 
 # ── 工具 ──────────────────────────────────────────────────────────
@@ -1078,7 +1114,7 @@ def handle_callback(cb):
             send_telegram("⚠️ 搵唔到呢個申請記錄。")
         else:
             offer_details = f"職位：{job['role']}\n公司：{job['company']}\n（其他 package 詳情可以喺對話中補充）"
-            save_session({"state": "negotiate_session", "offer_details": offer_details, "round_num": 0, "history": []})
+            save_session({"state": "negotiate_session", "offer_details": offer_details, "round_num": 0, "history": [], "job_id": job_id})
             send_telegram(
                 f"🤝 即將同 *{job['company']}* 嘅 HR 傾 *{job['role']}* 嘅薪酬。\n\n打你想講嘅第一句：",
                 reply_markup={"inline_keyboard": [[{"text": "🏁 結束談判", "callback_data": "negotiate_end"}]]}
@@ -1089,12 +1125,13 @@ def handle_callback(cb):
         send_telegram("已取消談判練習。")
 
     elif data == "negotiate_end":
-        session = load_session()
+        session = load_session() or {}
         send_telegram("📊 生成談判總結⋯⋯")
-        summary = generate_negotiate_summary((session or {}).get("history", []))
+        summary = generate_negotiate_summary(session.get("history", []))
         send_telegram(summary, reply_markup={"inline_keyboard": [[
             {"text": "🎯 繼續練習", "callback_data": "practice_new"},
         ]]})
+        _record_negotiate_summary(session, summary)
         clear_session()
 
     elif data == "debrief_job_skip":
@@ -1326,6 +1363,7 @@ def handle_message(text):
             send_telegram(summary, reply_markup={"inline_keyboard": [[
                 {"text": "🎯 繼續練習", "callback_data": "practice_new"},
             ]]})
+            _record_negotiate_summary(session, summary)
             clear_session()
             return
 
@@ -1346,6 +1384,7 @@ def handle_message(text):
         clear_session()
         send_telegram("🎙️ AI 分析緊你嘅面試表現⋯⋯")
         result = generate_debrief(job_info, text.strip())
+        _record_debrief_result(job_info, result)
         if job_info:
             send_telegram(result)
             handle_update_status_menu(job_info["id"])

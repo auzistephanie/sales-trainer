@@ -51,7 +51,8 @@ from utils import (
     load_jobs, save_jobs,
     load_addjob_session, save_addjob_session, clear_addjob_session,
     load_cv_text, save_cv_text,
-    send_telegram, send_document,
+    load_negotiate_log, save_negotiate_log, load_debrief_log, save_debrief_log,
+    send_telegram, send_document, upload_to_drive,
 )
 
 # ── 免費 session 上限 ──────────────────────────────────────────────
@@ -272,19 +273,56 @@ def _handle_negotiate_turn(session: dict, text: str):
     ]]})
 
 
-def _handle_negotiate_summary(history: list):
-    """背景 thread：生成談判總結。"""
+def _record_negotiate_summary(session: dict, summary: str):
+    """談判結束時記低結果：有連結 job 就存落 job["negotiate_log"]，冇就存落全局 log。"""
+    entry = {
+        "date":    datetime.now().strftime("%Y-%m-%d"),
+        "rounds":  session.get("round_num", 0),
+        "summary": summary,
+    }
+    job_id = session.get("job_id")
+    if job_id:
+        jobs = load_jobs()
+        job  = next((j for j in jobs if j["id"] == job_id), None)
+        if job:
+            job.setdefault("negotiate_log", []).append(entry)
+            save_jobs(jobs)
+            return
+    log = load_negotiate_log()
+    log.append(entry)
+    save_negotiate_log(log)
+
+
+def _record_debrief_result(job_info, result: str):
+    """覆盤分析完記低結果：有連結 job 就存落 job["debrief_log"]，冇就存落全局 log。"""
+    entry = {"date": datetime.now().strftime("%Y-%m-%d"), "result": result}
+    if job_info:
+        jobs = load_jobs()
+        job  = next((j for j in jobs if j["id"] == job_info.get("id")), None)
+        if job:
+            job.setdefault("debrief_log", []).append(entry)
+            save_jobs(jobs)
+            return
+    log = load_debrief_log()
+    log.append(entry)
+    save_debrief_log(log)
+
+
+def _handle_negotiate_summary(session: dict):
+    """背景 thread：生成談判總結 + 記低結果。"""
     send_telegram("📊 生成談判總結⋯⋯")
-    summary = generate_negotiate_summary(history)
+    summary = generate_negotiate_summary(session.get("history", []))
     send_telegram(summary, reply_markup={"inline_keyboard": [[
         {"text": "🎯 繼續練習", "callback_data": "practice_new"},
     ]]})
+    _record_negotiate_summary(session, summary)
 
 
 def _handle_debrief_result(job_info, text: str):
     """背景 thread：生成面試覆盤分析，如有連結職位就跟住問更新狀態。"""
     send_telegram("🎙️ AI 分析緊你嘅面試表現⋯⋯")
     result = generate_debrief(job_info, text)
+    _record_debrief_result(job_info, result)
     if job_info:
         send_telegram(result)
         handle_update_status_menu(job_info["id"])
@@ -540,12 +578,16 @@ def _auto_add_job_from_url(url: str):
     cover = generate_cover_letter_from_jd(cv_text, jd, company, role)
     send_telegram(f"📝 *Cover Letter — {company}*\n\n{cover}")
 
-    # 5. 生成 Tailored CV .docx
-    cv_data = generate_tailored_cv_content(cv_text, jd, company, role)
+    # 5. 生成 Tailored CV .docx → 上傳 Google Drive（未設定就直接傳 file）
+    drive_link = None
     if cv_data:
         docx_bytes = build_cv_docx(cv_data, company, role)
         filename   = f"CV_{company.replace(' ', '_')}_{role.replace(' ', '_')}.docx"
-        send_document(docx_bytes, filename, caption=f"📄 Tailored CV — {role} @ {company}")
+        drive_link = upload_to_drive(docx_bytes, filename)
+        if drive_link:
+            send_telegram(f"📄 Tailored CV 已上傳 Google Drive：[🔗 打開 CV]({drive_link})")
+        else:
+            send_document(docx_bytes, filename, caption=f"📄 Tailored CV — {role} @ {company}")
 
     # 6. ATS Match Score
     ats     = calculate_ats_score(jd, cv_text)
@@ -556,6 +598,8 @@ def _auto_add_job_from_url(url: str):
     for j in jobs:
         if j["id"] == new_id:
             j["ats_score"] = ats.get("score")
+            if drive_link:
+                j["cv_drive_link"] = drive_link
             break
     save_jobs(jobs)
 
@@ -784,7 +828,7 @@ def handle_callback(cb: dict):
         else:
             answer_callback(cb["id"])
             offer_details = f"職位：{job['role']}\n公司：{job['company']}\n（其他 package 詳情可以喺對話中補充）"
-            save_session({"state": "negotiate_session", "offer_details": offer_details, "round_num": 0, "history": []})
+            save_session({"state": "negotiate_session", "offer_details": offer_details, "round_num": 0, "history": [], "job_id": job_id})
             send_telegram(
                 f"🤝 即將同 *{job['company']}* 嘅 HR 傾 *{job['role']}* 嘅薪酬。\n\n打你想講嘅第一句：",
                 reply_markup={"inline_keyboard": [[{"text": "🏁 結束談判", "callback_data": "negotiate_end"}]]}
@@ -797,9 +841,9 @@ def handle_callback(cb: dict):
 
     elif data == "negotiate_end":
         answer_callback(cb["id"])
-        session = load_session()
+        session = load_session() or {}
         clear_session()
-        threading.Thread(target=_handle_negotiate_summary, args=((session or {}).get("history", []),), daemon=True).start()
+        threading.Thread(target=_handle_negotiate_summary, args=(session,), daemon=True).start()
 
     elif data == "debrief_job_skip":
         answer_callback(cb["id"])
@@ -1032,7 +1076,7 @@ def handle_message(text: str):
     if session and session.get("state") == "negotiate_session":
         if text.strip() == "結束" or cmd(text, "/negotiate"):
             clear_session()
-            threading.Thread(target=_handle_negotiate_summary, args=(session.get("history", []),), daemon=True).start()
+            threading.Thread(target=_handle_negotiate_summary, args=(session,), daemon=True).start()
             return
         threading.Thread(target=_handle_negotiate_turn, args=(session, text.strip()), daemon=True).start()
         return

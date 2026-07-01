@@ -93,6 +93,15 @@ def save_jd_session(data: dict): _redis_set("interview_jd_session", data, ex=900
 def clear_jd_session(): _redis_del("interview_jd_session")
 
 
+# ── Negotiate / Debrief 練習記錄（冇連結特定工嘅先落呢度，有連結嘅存喺 job 度）──
+
+def load_negotiate_log() -> list: return _redis_get("interview_negotiate_log") or []
+def save_negotiate_log(data: list): _redis_set("interview_negotiate_log", data[-20:])
+
+def load_debrief_log() -> list: return _redis_get("interview_debrief_log") or []
+def save_debrief_log(data: list): _redis_set("interview_debrief_log", data[-20:])
+
+
 # ── Job Application Tracker ───────────────────────────────────────
 
 def load_jobs() -> list: return _redis_get("interview_jobs") or []
