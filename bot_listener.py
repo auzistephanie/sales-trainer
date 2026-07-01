@@ -147,6 +147,7 @@ def record_score(qtype_name: str, score: int):
 
 def check_free_limit() -> bool:
     """True = 可以繼續，False = 超出免費次數。"""
+    return True  # 限制已停用（Stephanie 自用，2026-07-01），同步 api/webhook.py
     data  = load_stats()
     total = data.get("total_sessions", 0)
     # 每日免費 bonus：今日已免費練習 < 1
