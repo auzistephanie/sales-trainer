@@ -11,9 +11,15 @@ from interview_trainer import generate_job_questions, generate_job_tips
 
 STAGE_ORDER = ["Applied", "Phone Screen", "1st Interview", "2nd Interview", "Offer", "Rejected"]
 
-KANBAN_COLS = ["Applied", "Phone Screen", "1st Interview", "2nd Interview", "Offer / Rejected"]
+# Kanban 由 5 欄壓縮做 3 組，每欄闊啲、窄卡片問題可以進一步紓緩
+# (欄標題, 呢欄包含嘅 status, 色帶色, 標題字色)
+KANBAN_GROUPS = [
+    ("Applied · Phone Screen",  ["Applied", "Phone Screen"],       "#B4B2A9", "#444441"),
+    ("1st · 2nd Interview",     ["1st Interview", "2nd Interview"], "#7F77DD", "#3C3489"),
+    ("Offer · Rejected",        ["Offer", "Rejected"],              "#B4B2A9", "#444441"),
+]
 
-# 每個狀態對應嘅色系：bar = 色帶／漏斗色，bg/text = badge 底色同字色
+# 每個狀態對應嘅色系：bar = 色帶／漏斗色，bg/text = badge 底色同字色（用喺個別卡片上）
 STATUS_STYLE = {
     "Applied":       {"bar": "#B4B2A9", "bg": "#F1EFE8", "text": "#444441"},
     "Phone Screen":  {"bar": "#EF9F27", "bg": "#FAEEDA", "text": "#854F0B"},
@@ -33,7 +39,10 @@ def days_since(applied_date: str) -> int:
 
 
 def bucket_key(status: str) -> str:
-    return "Offer / Rejected" if status in ("Offer", "Rejected") else status
+    for title, statuses, _, _ in KANBAN_GROUPS:
+        if status in statuses:
+            return title
+    return KANBAN_GROUPS[0][0]
 
 
 def reached_stage(job: dict, stage: str) -> bool:
@@ -103,17 +112,16 @@ st.divider()
 if not jobs:
     st.info("未有申請記錄。用 Telegram bot 直接發 job link，或 `/addjob` 手動新增。")
 else:
-    buckets: dict[str, list] = {t: [] for t in KANBAN_COLS}
+    buckets: dict[str, list] = {title: [] for title, *_ in KANBAN_GROUPS}
     for j in jobs:
         buckets[bucket_key(j.get("status", "Applied"))].append(j)
 
-    cols = st.columns(5)
-    for col, col_title in zip(cols, KANBAN_COLS):
-        header_style = STATUS_STYLE.get(col_title, STATUS_STYLE["Applied"])
+    cols = st.columns(3)
+    for col, (col_title, _statuses, bar_color, text_color) in zip(cols, KANBAN_GROUPS):
         with col:
             st.markdown(
-                f'<div style="border-left:3px solid {header_style["bar"]}; padding:2px 0 2px 8px; margin-bottom:10px;">'
-                f'<p style="font-size:13px; font-weight:600; margin:0; color:{header_style["text"]};">'
+                f'<div style="border-left:3px solid {bar_color}; padding:2px 0 2px 8px; margin-bottom:10px;">'
+                f'<p style="font-size:13px; font-weight:600; margin:0; color:{text_color};">'
                 f'{col_title}（{len(buckets[col_title])}）</p></div>',
                 unsafe_allow_html=True,
             )
