@@ -742,17 +742,32 @@ def handle_update_status_menu(job_id: str):
 # ── JD / Cover Letter / Tailored CV Handlers ─────────────────────
 
 def fetch_jd_via_jina(url: str) -> str:
-    """用 Jina Reader 抓取 URL 內容（支援 JS 渲染頁面）。"""
-    try:
-        resp = req.get(
-            f"https://r.jina.ai/{url}",
-            headers={"Accept": "text/plain", "X-No-Cache": "true"},
-            timeout=15,
-        )
-        if resp.ok and len(resp.text.strip()) > 200:
-            return resp.text[:4000]
-    except Exception as e:
-        print(f"[jina fetch] {e}")
+    """用 Jina Reader 抓取 URL 內容（支援 JS 渲染頁面）。
+
+    2026-07-02 修正：
+    - 移除 X-No-Cache（之前強制每次完整重新 render JS 頁面，超慢 → timeout）
+    - timeout 15→45（SEEK/JobsDB 冷 render 成日過 15s；Vercel maxDuration=60 有位）
+    - 加 X-Return-Format=markdown（乾淨 JD，唔使成堆 HTML）
+    - 有 JINA_API_KEY 就用（免費層 rate limit 好鬆），冇都照跑
+    - 加一次 retry
+    """
+    headers = {"Accept": "text/plain", "X-Return-Format": "markdown"}
+    jina_key = os.environ.get("JINA_API_KEY", "").strip()
+    if jina_key:
+        headers["Authorization"] = f"Bearer {jina_key}"
+
+    for attempt in range(2):
+        try:
+            resp = req.get(
+                f"https://r.jina.ai/{url}",
+                headers=headers,
+                timeout=45,
+            )
+            if resp.ok and len(resp.text.strip()) > 200:
+                return resp.text[:4000]
+            print(f"[jina fetch] attempt {attempt+1} status={resp.status_code} len={len(resp.text.strip())}")
+        except Exception as e:
+            print(f"[jina fetch] attempt {attempt+1} {e}")
     return ""
 
 
