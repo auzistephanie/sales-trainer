@@ -40,6 +40,7 @@ from interview_trainer import (
     extract_job_from_url,
     generate_cover_letter_from_jd, generate_tailored_cv_content, build_cv_docx,
     generate_negotiate_response, generate_negotiate_summary, extract_negotiate_reply,
+    generate_debrief,
 )
 from utils import (
     load_stats, save_stats,
@@ -76,6 +77,14 @@ def answer_callback(cb_id: str, text: str = ""):
 JOB_STATUSES = ["Applied", "Phone Screen", "1st Interview", "2nd Interview", "Offer", "Rejected"]
 STATUS_EMOJI  = {"Applied": "📝", "Phone Screen": "📞", "1st Interview": "🤝",
                  "2nd Interview": "🔁", "Offer": "🎉", "Rejected": "❌"}
+
+DEBRIEF_PROMPT = (
+    "請描述面試過程。包括：\n"
+    "- 問咗咩問題\n"
+    "- 你點答\n"
+    "- Interviewer 嘅反應\n"
+    "- 你覺得咩位答得唔好"
+)
 
 
 def register_commands():
