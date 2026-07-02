@@ -1,5 +1,5 @@
 """AI 面試教練 Bot — Vercel Webhook Handler (interview_trainer edition)"""
-import sys, os, re
+import sys, os, re, traceback
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -1595,19 +1595,33 @@ def webhook():
     update = request.json or {}
 
     # 抽取 chat_id，令 send_telegram 知道發去邊
+    trigger = ""
     if "callback_query" in update:
         chat_id = update["callback_query"]["message"]["chat"]["id"]
         set_current_chat_id(chat_id)
-        handle_callback(update["callback_query"])
+        trigger = update["callback_query"].get("data", "")
     elif "message" in update:
         chat_id = update["message"]["chat"]["id"]
         set_current_chat_id(chat_id)
-        document = update["message"].get("document")
-        text     = update["message"].get("text", "").strip()
-        if document:
-            handle_document(document)
-        elif text:
-            handle_message(text)
+        trigger = update["message"].get("text") or "[document]"
+
+    try:
+        if "callback_query" in update:
+            handle_callback(update["callback_query"])
+        elif "message" in update:
+            document = update["message"].get("document")
+            text     = update["message"].get("text", "").strip()
+            if document:
+                handle_document(document)
+            elif text:
+                handle_message(text)
+    except Exception as e:
+        tb = traceback.format_exc()
+        print(tb)
+        try:
+            send_telegram(f"⚠️ Bot error\n指令：{trigger}\n錯誤：{type(e).__name__}: {e}")
+        except Exception:
+            pass
 
     return jsonify({"ok": True})
 
