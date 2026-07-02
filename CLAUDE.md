@@ -154,6 +154,18 @@ Redis key `interview_setup_session`（onboarding 專用，另一個獨立 sessio
 - commit message 要具體描述改動（唔好用 "update files"）
 - ⚠️ **一次 run = 一個 commit**（2026-07-02 重寫）：舊版用 Contents API 逐個檔案 PUT，一次 push 整十幾個 commit → 十幾個 Vercel deployment，2026-07-02 爆咗 Vercel 免費 plan「100 deployments/日」上限（`api-deployments-free-per-day`）。新版用 Git Data API 砌一個 tree + 一個 commit，無論改幾多檔案都只觸發一次 build。**唔好喺短時間內連環 push**，慳返 deployment 額度
 
+## ⚠️ requirements.txt 唔可以有 streamlit（Vercel 500MB 限制）
+- `requirements.txt` 由 **Vercel（serverless functions）同 Streamlit Cloud（求職 CRM 網頁）共用**
+- **streamlit（連 pandas/pyarrow ~200MB+）只有 `job_crm.py` + `pages/` 用，`api/` 完全冇 import**
+- Vercel 每個 function 都會 bundle 全份 requirements。加咗 `api/daily_check.py`（第二個 function）之後，兩個 function 各揹一份 streamlit → **541MB 爆咗 Vercel「500MB max function size」→ build failed**（2026-07-03）
+- 解決：由 `requirements.txt` **移除 streamlit**。Streamlit Community Cloud 會自己 auto-provision `streamlit`（實測 log 見到 `+ streamlit==1.58.0`），網頁照跑；Vercel bundle 即刻跌返 500MB 以下
+- **規則：唔好將淨係 Streamlit 用嘅重 dependency（streamlit/pandas/pyarrow…）加入 `requirements.txt`**，否則會再爆 Vercel
+
+## Tailored CV — v7 格式（2026-07-03 對齊 skill）
+- `generate_tailored_cv_content()` + `build_cv_docx()`（`interview_trainer.py`）已重寫，對齊 `tailored-cv-generator` skill 嘅 v7：navy heading + 底線、2-col Core Competencies table、keepNext 分頁、齊 Earlier Exp/Certs/Languages/Salary section
+- 修好「削肉」ATS 問題：唔再截 CV 到 3500 字（改 9000）、prompt 明確要求「保留所有 JD 相關 keyword，tailored 版 ATS 必須 ≥ 原版」
+- JSON 新增欄位：`earlier_experience` / `certifications` / `languages` / `salary`；experience 用 `title`（唔係 `role`）
+
 ## 改版歷史
 詳細改版歷史（每次功能改動的具體記錄）→ `CHANGELOG.md`，唔需要每次對話都讀。
 
