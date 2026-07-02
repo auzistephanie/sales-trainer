@@ -56,7 +56,7 @@ Status 值：Applied / Phone Screen / 1st Interview / 2nd Interview / Offer / Re
 
 ## Daily Check — Follow-up 提醒 + 求職週報（新功能 2026-07-03）
 
-`api/daily_check.py` — 獨立 Vercel serverless function，Vercel cron 每日 10:00 HKT（`vercel.json` `"schedule": "0 2 * * *"` UTC）打 `/api/daily_check`。`vercel.json` 要喺 catch-all rewrite 之前加一條 `/api/daily_check` → 自己嘅明確 rewrite，否則會俾 `/(.*) → /api/webhook` 嗰條吞晒。
+`api/daily_check.py` — 獨立 Vercel serverless function，⚠️ **唔用 Vercel 內建 cron**（`vercel.json` 冇 `crons` 設定，2026-07-02 已移除），改用外部服務 **cron-job.org** 每日 10:00 HKT 打 `https://sales-trainer-wheat.vercel.app/api/daily_check`（endpoint 冇加 auth，GET/POST 都得）。`vercel.json` 仍然要喺 catch-all rewrite 之前加一條 `/api/daily_check` → 自己嘅明確 rewrite，否則會俾 `/(.*) → /api/webhook` 嗰條吞晒。
 
 **Follow-up 提醒**（`check_followups()`）：status 係 Applied / Phone Screen 嘅 job，`last_touch`（冇就用 `applied_date`）超過 7 日冇郁 → 推 Telegram，附 3 個掣：
 - `job_followup_{id}` → 重置 `last_touch` = 今日
@@ -70,6 +70,15 @@ Status 值：Applied / Phone Screen / 1st Interview / 2nd Interview / Offer / Re
 - 過去 7 日狀態變化（`status_change_log`）
 - 過去 7 日練習次數 + 平均分（`interview_stats` 新增嘅 `daily_log`{日期:次數} 同 `score_log`[{date,qtype,score}]，喺 `record_score()` 寫入，`daily_log` 保留 60 日）
 - 最弱題型（跨全部歷史 `qtype_scores` 揀平均分最低嗰個，同 `/stats` 用同一套邏輯）
+
+**自動搵工推送**（`scan_new_jobs()`，同一個 daily_check 內一齊跑）：
+- 搜尋關鍵字 `JOBSDB_SEARCH_KEYWORDS = ["education", "education coordinator", "edtech"]`（Stephanie 2026-07-03 揀嘅，想改直接改呢個 list）
+- 用 Jina Reader 抓 `https://hk.jobsdb.com/jobs?keywords=<關鍵字>`（`X-With-Links-Summary: true` 攞埋職位連結），冇 `profile.job_title`/`industry` 就唔掃
+- DeepSeek 對住 profile 揀最啱嘅職位（最多 `MAX_JOBS_PUSHED_PER_DAY=3`），dedup 用 Redis `seen_scanned_jobs`（title+company 組合，上限 500 個）
+- 每個推薦存 `scanned_job:{short_id}`（TTL 14 日），Telegram 推送附 2 個掣：
+  - `scanjob_open_{id}` → 直接call現有嘅 `handle_url_message(url)`，等於自己貼咗個 link，會出返 Cover Letter / Tailored CV / 加入追蹤 嗰個選單
+  - `scanjob_skip_{id}` → 淨係刪走個 scanned_job 記錄
+- ⚠️ 風險：JobsDB 改版／加強反爬會令 Jina 抓唔到嘢，`scan_new_jobs()` 靜靜地回傳 0（唔會報錯，但都唔會推嘢）——如果幾日都冇推薦，check下係咪呢度斷咗
 
 Inline callbacks：`job_q_{id}` / `job_tips_{id}` / `job_practice_{id}` / `job_updatestatus_{id}` / `job_status_{id}_{status}`
 
