@@ -46,7 +46,10 @@ if load_dotenv:
 
 
 def run(args):
-    return subprocess.run(args, cwd=REPO, capture_output=True, text=True)
+    # -c core.quotepath=false：非 ASCII（中文）檔名唔好被 octal-escape 做 "\346\...",
+    # 否則 git ls-files 攞到嘅係字面 backslash-digit 文字，match 唔到真檔案，會被當刪咗。
+    return subprocess.run(["git", "-c", "core.quotepath=false"] + args[1:],
+                           cwd=REPO, capture_output=True, text=True)
 
 
 def get_remote_url():
