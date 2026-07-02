@@ -52,7 +52,10 @@ def _redis_del(key: str):
 # ── Stats ─────────────────────────────────────────────────────────
 
 def load_stats() -> dict:
-    return _redis_get(_STATS_KEY) or {"qtype_scores": {}, "total_sessions": 0, "streak": {"last_date": "", "count": 0}}
+    return _redis_get(_STATS_KEY) or {
+        "qtype_scores": {}, "total_sessions": 0, "streak": {"last_date": "", "count": 0},
+        "daily_log": {}, "score_log": [], "status_change_log": [],
+    }
 
 def save_stats(data: dict): _redis_set(_STATS_KEY, data)
 

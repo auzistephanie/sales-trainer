@@ -1,6 +1,13 @@
 {
-  "rewrites": [{ "source": "/(.*)", "destination": "/api/webhook" }],
+  "rewrites": [
+    { "source": "/api/daily_check", "destination": "/api/daily_check" },
+    { "source": "/(.*)", "destination": "/api/webhook" }
+  ],
   "functions": {
-    "api/webhook.py": { "maxDuration": 60 }
-  }
+    "api/webhook.py": { "maxDuration": 60 },
+    "api/daily_check.py": { "maxDuration": 60 }
+  },
+  "crons": [
+    { "path": "/api/daily_check", "schedule": "0 2 * * *" }
+  ]
 }

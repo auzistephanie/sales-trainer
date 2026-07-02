@@ -171,6 +171,15 @@ def record_score(qtype_name: str, score: int):
     else:
         s["count"] = 1; s["last_date"] = today
 
+    daily_log = data.setdefault("daily_log", {})
+    daily_log[today] = daily_log.get(today, 0) + 1
+    cutoff = (datetime.now() - timedelta(days=60)).strftime("%Y-%m-%d")
+    data["daily_log"] = {d: c for d, c in daily_log.items() if d >= cutoff}
+
+    score_log = data.setdefault("score_log", [])
+    score_log.append({"date": today, "qtype": qtype_name, "score": score})
+    data["score_log"] = score_log[-200:]
+
     save_stats(data)
 
 
@@ -551,6 +560,7 @@ def _save_addjob_final(addjob: dict):
         "jd":           addjob.get("jd", ""),
         "link":         addjob.get("link", ""),
         "applied_date": datetime.now().strftime("%Y-%m-%d"),
+        "last_touch":   datetime.now().strftime("%Y-%m-%d"),
         "status":       "Applied",
     }
     jobs.append(job)
@@ -931,6 +941,7 @@ def handle_jd_add_to_tracker():
         "jd":           sess.get("jd_text", "")[:500],
         "link":         sess.get("url", ""),
         "applied_date": datetime.now().strftime("%Y-%m-%d"),
+        "last_touch":   datetime.now().strftime("%Y-%m-%d"),
         "status":       "Applied",
         "ats_score":      sess.get("ats_score"),
         "cv_drive_link":  sess.get("cv_drive_link"),
@@ -1181,17 +1192,56 @@ def handle_callback(cb):
             job_id     = parts[2]
             new_status = parts[3]
             jobs       = load_jobs()
+            today      = datetime.now().strftime("%Y-%m-%d")
+            old_status = None
             for j in jobs:
                 if j["id"] == job_id:
-                    j["status"] = new_status
+                    old_status     = j.get("status")
+                    j["status"]     = new_status
+                    j["last_touch"] = today
+                    j.pop("snooze_until", None)
                     break
             save_jobs(jobs)
+            job = next((j for j in jobs if j["id"] == job_id), {})
+            if old_status is not None and old_status != new_status:
+                stats_data = load_stats()
+                log = stats_data.setdefault("status_change_log", [])
+                log.append({
+                    "date": today, "company": job.get("company", ""),
+                    "role": job.get("role", ""), "from": old_status, "to": new_status,
+                })
+                stats_data["status_change_log"] = log[-200:]
+                save_stats(stats_data)
             emoji = STATUS_EMOJI.get(new_status, "📝")
-            job   = next((j for j in jobs if j["id"] == job_id), {})
             send_telegram(
                 f"{emoji} 已更新：*{job.get('company','')} — {job.get('role','')}*\n"
                 f"狀態 → {new_status}"
             )
+
+    elif data.startswith("job_followup_"):
+        job_id = data[len("job_followup_"):]
+        jobs   = load_jobs()
+        today  = datetime.now().strftime("%Y-%m-%d")
+        for j in jobs:
+            if j["id"] == job_id:
+                j["last_touch"] = today
+                j.pop("snooze_until", None)
+                break
+        save_jobs(jobs)
+        job = next((j for j in jobs if j["id"] == job_id), {})
+        send_telegram(f"✅ 已記錄 follow-up：{job.get('company','')} — {job.get('role','')}")
+
+    elif data.startswith("job_snooze_"):
+        job_id      = data[len("job_snooze_"):]
+        jobs        = load_jobs()
+        snooze_date = (datetime.now() + timedelta(days=3)).strftime("%Y-%m-%d")
+        for j in jobs:
+            if j["id"] == job_id:
+                j["snooze_until"] = snooze_date
+                break
+        save_jobs(jobs)
+        job = next((j for j in jobs if j["id"] == job_id), {})
+        send_telegram(f"⏰ 已 snooze 3 日：{job.get('company','')} — {job.get('role','')}（{snooze_date} 再提你）")
 
 
 # ── Message ───────────────────────────────────────────────────────
