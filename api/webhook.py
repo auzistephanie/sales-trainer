@@ -1243,6 +1243,18 @@ def handle_callback(cb):
         job = next((j for j in jobs if j["id"] == job_id), {})
         send_telegram(f"⏰ 已 snooze 3 日：{job.get('company','')} — {job.get('role','')}（{snooze_date} 再提你）")
 
+    elif data.startswith("scanjob_open_"):
+        short_id = data[len("scanjob_open_"):]
+        job = _redis_get(f"scanned_job:{short_id}")
+        if not job or not job.get("url"):
+            send_telegram("⚠️ 呢個推薦已過期或冇有效連結，請手動貼 link 或用 JobsDB 搜尋。")
+        else:
+            handle_url_message(job["url"])
+
+    elif data.startswith("scanjob_skip_"):
+        short_id = data[len("scanjob_skip_"):]
+        _redis_del(f"scanned_job:{short_id}")
+
 
 # ── Message ───────────────────────────────────────────────────────
 
