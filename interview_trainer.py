@@ -780,49 +780,59 @@ REMEMBER: body ≤ 150 words. Count before you finish."""
 
 
 def generate_tailored_cv_content(cv_text: str, jd_text: str, company: str, role: str) -> dict:
-    """根據 JD 分析 CV，返回 tailored CV 各部份內容（dict），供 .docx 生成用。"""
+    """根據 JD 分析 CV，返回 tailored CV 各部份內容（dict），供 v7 .docx 生成用。
+
+    2026-07-02 重寫：對齊 tailored-cv-generator skill 嘅 v7 品質。
+    重點修正「削肉」問題 —— 舊版截 CV 到 3500 字 + 只留 4 bullet，會掉走 keyword
+    令 tailored 版 ATS 反而低過原版。新版用足本 CV + 明確要求「保留所有 JD 相關 keyword，
+    tailored 版 ATS 必須 ≥ 原版」。
+    """
     import json as _json
     ai_client = OpenAI(api_key=DEEPSEEK_API_KEY, base_url="https://api.deepseek.com")
 
     prompt = f"""You are an expert ATS-optimised CV writer for the Hong Kong job market.
-Tailor the applicant's CV for this specific job.
+Tailor the candidate's CV for this specific job.
 
 CRITICAL RULES:
-1. Use ONLY information from the candidate's actual CV — NEVER fabricate companies, titles, dates, metrics or skills.
-2. Keep all real job titles, company names and dates exactly as written in the CV.
-3. Tailor the summary and every bullet to naturally match the JD's keywords (ATS optimisation) — but only where the CV genuinely supports it.
-4. Core competencies: 8–12 items, mixing role-relevant hard skills AND tools/tech, drawn from the CV.
-5. Each experience bullet should be achievement-oriented (action verb + what + result), and quantified whenever the CV provides numbers.
-6. Do NOT mention degree/education or language ability inside the professional summary.
-7. Education: extract every school/degree/year found in the CV (even partial). If the CV genuinely has NO education info, return an empty list [] — NEVER write placeholder text like "not specified" or "N/A".
+1. Use ONLY information from the candidate's actual CV — NEVER fabricate companies, titles, dates, metrics, skills or certifications.
+2. Keep every real job title, company name and date exactly as written in the CV.
+3. KEYWORD PRESERVATION (most important): the tailored CV MUST retain every skill, tool, certification and keyword from the original CV that is relevant to the JD. Do NOT drop content. Rephrase/reorder to surface JD keywords, but the result must score EQUAL OR HIGHER than the original on ATS keyword matching — never lower.
+4. Tailor the summary and bullets to naturally mirror the JD's exact keywords/phrasing, but only where the CV genuinely supports it.
+5. Core competencies: 8–12 items, split naturally into operations/admin skills AND technology/automation/tools, all drawn from the CV.
+6. Each experience bullet: achievement-oriented (action verb + what + result), quantified whenever the CV gives numbers. Give 3–4 bullets per role (keep the strongest).
+7. Do NOT mention degree/education or language ability inside the professional summary.
+8. Extract education, certifications, languages and expected salary from the CV if present. If a field is genuinely absent, return "" or [] — NEVER write placeholder text like "not specified" or "N/A".
 
-【Original CV】
-{cv_text[:3500]}
+【Original CV (full)】
+{cv_text[:9000]}
 
 【Target Job】
 Company: {company}
 Role: {role}
-JD:
-{jd_text[:2500]}
+Job Description:
+{jd_text[:3000]}
 
-Output ONLY valid JSON (no markdown, no code block) with this exact structure:
+Output ONLY valid JSON (no markdown, no code fences) with this EXACT structure:
 {{
   "name": "full name from CV",
-  "contact": "email | phone | location (one line)",
-  "summary": "3-4 sentence professional summary tailored to this role, no education/language mention (English)",
-  "core_competencies": ["8 to 12 skills mixing role-relevant hard skills and tools/tech"],
+  "contact": "phone  |  email  |  linkedin/location (one line, from CV)",
+  "summary": "3-4 sentence professional summary tailored to this role, no education/language mention",
+  "core_competencies": ["8 to 12 skills, operations/admin ones first then technology/automation/tools"],
   "experience": [
     {{
+      "title": "job title",
       "company": "full company name",
-      "role": "job title",
-      "period": "date range",
-      "bullets": ["4 achievement-oriented bullets, each matched to a JD requirement and quantified where possible"]
+      "period": "Month Year – Month Year",
+      "bullets": ["3-4 achievement bullets matched to JD requirements, quantified where possible"]
     }}
   ],
+  "earlier_experience": ["one-liners for older roles, format: Month Year – Month Year: Role, Company"],
   "education": [
-    {{"institution": "...", "degree": "...", "year": "..."}}
+    {{"degree": "...", "institution": "...", "period": "Month Year – Month Year"}}
   ],
-  "additional": "languages, certifications, tools (one line)"
+  "certifications": ["cert lines from CV relevant to this role (format: Month Year: Name (Issuer))"],
+  "languages": "e.g. Cantonese  |  English  |  Mandarin (from CV, or empty string)",
+  "salary": "e.g. Expected Salary: HKD ... per month  |  Notice Period: ... (from CV, or empty string)"
 }}"""
 
     try:
@@ -830,7 +840,7 @@ Output ONLY valid JSON (no markdown, no code block) with this exact structure:
             model="deepseek-chat",
             messages=[{"role": "user", "content": prompt}],
             temperature=0.3,
-            max_tokens=2200,
+            max_tokens=3000,
         )
         content = resp.choices[0].message.content.strip()
         content = content.replace("```json", "").replace("```", "").strip()
@@ -841,131 +851,213 @@ Output ONLY valid JSON (no markdown, no code block) with this exact structure:
 
 
 def build_cv_docx(cv_data: dict, company: str, role: str) -> bytes:
-    """將 tailored CV dict 轉成 .docx bytes，可直接發 Telegram。"""
+    """將 tailored CV dict 轉成 v7 格式 .docx bytes（對齊 tailored-cv-generator skill）。"""
     from docx import Document
     from docx.shared import Pt, RGBColor, Inches
     from docx.enum.text import WD_ALIGN_PARAGRAPH
+    from docx.oxml.ns import qn
+    from docx.oxml import OxmlElement
     import io
 
+    NAVY  = RGBColor(0x1C, 0x35, 0x57)   # 名、heading、公司名
+    DARK  = RGBColor(0x44, 0x44, 0x44)   # contact、institution、languages、salary
+    MED   = RGBColor(0x66, 0x66, 0x66)   # edu date
+    LGRAY = RGBColor(0x88, 0x88, 0x88)   # job date
+    BODY  = RGBColor(0x00, 0x00, 0x00)
+
     doc = Document()
+    for section in doc.sections:
+        section.top_margin    = Inches(0.6)
+        section.bottom_margin = Inches(0.6)
+        section.left_margin   = Inches(0.75)
+        section.right_margin  = Inches(0.75)
 
-    # 頁面設定
-    section = doc.sections[0]
-    section.top_margin    = Inches(0.6)
-    section.bottom_margin = Inches(0.6)
-    section.left_margin   = Inches(0.8)
-    section.right_margin  = Inches(0.8)
+    def keep_next(p):
+        p._p.get_or_add_pPr().append(OxmlElement('w:keepNext'))
 
-    BLUE = RGBColor(0x2E, 0x74, 0xB5)
+    def keep_lines(p):
+        p._p.get_or_add_pPr().append(OxmlElement('w:keepLines'))
 
-    def heading(text, size=14, color=BLUE, bold=True, align=WD_ALIGN_PARAGRAPH.LEFT):
+    def cell_bg(cell, hex_color):
+        shd = OxmlElement('w:shd')
+        shd.set(qn('w:val'), 'clear'); shd.set(qn('w:color'), 'auto')
+        shd.set(qn('w:fill'), hex_color)
+        cell._tc.get_or_add_tcPr().append(shd)
+
+    def section_heading(text):
         p = doc.add_paragraph()
-        p.alignment = align
-        run = p.add_run(text)
-        run.bold = bold
-        run.font.size = Pt(size)
-        run.font.color.rgb = color
-        return p
-
-    def divider():
-        p = doc.add_paragraph()
-        p.paragraph_format.space_before = Pt(2)
+        p.paragraph_format.space_before = Pt(9)
         p.paragraph_format.space_after  = Pt(4)
-        run = p.add_run("─" * 55)
-        run.font.size = Pt(9)
-        run.font.color.rgb = RGBColor(0xCC, 0xCC, 0xCC)
-
-    def section_title(text):
-        p = doc.add_paragraph()
-        p.paragraph_format.space_before = Pt(8)
-        p.paragraph_format.space_after  = Pt(2)
         run = p.add_run(text.upper())
-        run.bold = True
-        run.font.size = Pt(9)
-        run.font.color.rgb = BLUE
-
-    def body(text, size=10, bold=False, space_after=2):
-        p = doc.add_paragraph()
-        p.paragraph_format.space_after = Pt(space_after)
-        run = p.add_run(text)
-        run.font.size = Pt(size)
-        run.bold = bold
+        run.bold = True; run.font.size = Pt(10.5); run.font.color.rgb = NAVY
+        pPr = p._p.get_or_add_pPr()
+        pBdr = OxmlElement('w:pBdr'); bottom = OxmlElement('w:bottom')
+        bottom.set(qn('w:val'), 'single'); bottom.set(qn('w:sz'), '6')
+        bottom.set(qn('w:space'), '1');    bottom.set(qn('w:color'), '1C3557')
+        pBdr.append(bottom); pPr.append(pBdr)
+        keep_next(p)
         return p
 
-    # ── Header ──
-    p_name = doc.add_paragraph()
-    p_name.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    r = p_name.add_run(cv_data.get("name", ""))
-    r.bold = True; r.font.size = Pt(18); r.font.color.rgb = BLUE
+    def add_body(text, size=10, sb=0, sa=2, bold=False, color=None):
+        p = doc.add_paragraph()
+        p.paragraph_format.space_before = Pt(sb); p.paragraph_format.space_after = Pt(sa)
+        run = p.add_run(text); run.font.size = Pt(size); run.bold = bold
+        if color: run.font.color.rgb = color
+        return p
 
-    p_contact = doc.add_paragraph()
-    p_contact.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    rc = p_contact.add_run(cv_data.get("contact", ""))
-    rc.font.size = Pt(9); rc.font.color.rgb = RGBColor(0x55, 0x55, 0x55)
-    p_contact.paragraph_format.space_after = Pt(2)
+    def add_bullet(text, size=10, indent=0.2):
+        p = doc.add_paragraph(style='List Bullet')
+        p.paragraph_format.space_before = Pt(0); p.paragraph_format.space_after = Pt(1)
+        p.paragraph_format.left_indent = Inches(indent)
+        run = p.add_run(text); run.font.size = Pt(size)
+        return p
 
-    # tailored tag
-    p_tag = doc.add_paragraph()
-    p_tag.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    rt = p_tag.add_run(f"Tailored for: {role} @ {company}")
-    rt.font.size = Pt(8); rt.italic = True
-    rt.font.color.rgb = RGBColor(0x88, 0x88, 0x88)
+    # ── NAME ──
+    np = doc.add_paragraph(); np.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    np.paragraph_format.space_after = Pt(3)
+    nr = np.add_run((cv_data.get("name", "") or "").upper())
+    nr.bold = True; nr.font.size = Pt(16); nr.font.color.rgb = NAVY
 
-    divider()
+    # ── CONTACT ──
+    if cv_data.get("contact"):
+        cp = doc.add_paragraph(); cp.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        cp.paragraph_format.space_after = Pt(2)
+        cr = cp.add_run(cv_data["contact"]); cr.font.size = Pt(9); cr.font.color.rgb = DARK
 
-    # ── Summary ──
-    section_title("Professional Summary")
-    body(cv_data.get("summary", ""), space_after=4)
+    # ── divider ──
+    div = doc.add_paragraph()
+    div.paragraph_format.space_before = Pt(2); div.paragraph_format.space_after = Pt(2)
+    pBdr = OxmlElement('w:pBdr'); bot = OxmlElement('w:bottom')
+    bot.set(qn('w:val'), 'single'); bot.set(qn('w:sz'), '6')
+    bot.set(qn('w:space'), '1');    bot.set(qn('w:color'), '1C3557')
+    pBdr.append(bot); div._p.get_or_add_pPr().append(pBdr)
 
-    # ── Core Competencies ──
+    # ── PROFESSIONAL SUMMARY ──
+    if cv_data.get("summary"):
+        section_heading("Professional Summary")
+        add_body(cv_data["summary"], size=10, sa=0)
+
+    # ── CORE COMPETENCIES (2-col table) ──
     skills = cv_data.get("core_competencies", [])
     if skills:
-        section_title("Core Competencies")
-        cols = 3
-        rows = (len(skills) + cols - 1) // cols
-        table = doc.add_table(rows=rows, cols=cols)
-        table.style = "Table Grid"
-        flat = skills + [""] * (rows * cols - len(skills))
-        for i, sk in enumerate(flat):
-            cell = table.cell(i // cols, i % cols)
-            cell.text = f"• {sk}" if sk else ""
-            for run in cell.paragraphs[0].runs:
-                run.font.size = Pt(9)
-        doc.add_paragraph()
+        section_heading("Core Competencies")
+        mid = (len(skills) + 1) // 2
+        col1, col2 = skills[:mid], skills[mid:]
+        tbl = doc.add_table(rows=1 + max(len(col1), len(col2)), cols=2)
+        tbl_pr = tbl._tbl.find(qn('w:tblPr'))
+        if tbl_pr is None:
+            tbl_pr = OxmlElement('w:tblPr'); tbl._tbl.insert(0, tbl_pr)
+        borders = OxmlElement('w:tblBorders')
+        for b in ['top', 'left', 'bottom', 'right', 'insideH', 'insideV']:
+            e = OxmlElement(f'w:{b}'); e.set(qn('w:val'), 'none')
+            e.set(qn('w:sz'), '0'); e.set(qn('w:space'), '0'); e.set(qn('w:color'), 'auto')
+            borders.append(e)
+        tbl_pr.append(borders)
+        tbl.columns[0].width = Inches(3.25); tbl.columns[1].width = Inches(3.25)
+        headers = ["Operations & Administration", "Technology & Automation"]
+        for ci, h in enumerate(headers):
+            cell = tbl.rows[0].cells[ci]; cell_bg(cell, 'FFFFFF')
+            r = cell.paragraphs[0].add_run(h)
+            r.bold = True; r.font.size = Pt(9); r.font.color.rgb = NAVY
+            cell.paragraphs[0].paragraph_format.space_before = Pt(2)
+            cell.paragraphs[0].paragraph_format.space_after  = Pt(2)
+        for ri in range(max(len(col1), len(col2))):
+            for ci, cl in enumerate([col1, col2]):
+                cell = tbl.rows[ri + 1].cells[ci]
+                txt = f"• {cl[ri]}" if ri < len(cl) else ""
+                r = cell.paragraphs[0].add_run(txt); r.font.size = Pt(9.5)
+                cell.paragraphs[0].paragraph_format.space_before = Pt(1)
+                cell.paragraphs[0].paragraph_format.space_after  = Pt(1)
+        sp = doc.add_paragraph()
+        sp.paragraph_format.space_before = Pt(0); sp.paragraph_format.space_after = Pt(0)
+        spacing = OxmlElement('w:spacing'); spacing.set(qn('w:line'), '20')
+        spacing.set(qn('w:lineRule'), 'exact'); sp._p.get_or_add_pPr().append(spacing)
 
-    # ── Experience ──
-    section_title("Professional Experience")
-    for exp in cv_data.get("experience", []):
-        p_role = doc.add_paragraph()
-        p_role.paragraph_format.space_after = Pt(0)
-        r1 = p_role.add_run(exp.get("role", ""))
-        r1.bold = True; r1.font.size = Pt(10)
-        r2 = p_role.add_run(f"  |  {exp.get('company', '')}  |  {exp.get('period', '')}")
-        r2.font.size = Pt(9)
-        r2.font.color.rgb = RGBColor(0x55, 0x55, 0x55)
-        for b in exp.get("bullets", []):
-            p_b = doc.add_paragraph(style="List Bullet")
-            p_b.paragraph_format.space_after = Pt(1)
-            run = p_b.add_run(b)
-            run.font.size = Pt(9)
-        doc.add_paragraph().paragraph_format.space_after = Pt(4)
+    # ── PROFESSIONAL EXPERIENCE ──
+    COMPANY_FIX = {
+        "venturenix lab": "Venturenix LAB Limited",
+        "smark global":   "Smark Global (Holdings) Limited",
+        "edge franchising":"Edge Franchising Co. Limited",
+        "sogo":           "Sogo Hong Kong",
+    }
+    exps = cv_data.get("experience", [])
+    if exps:
+        section_heading("Professional Experience")
+        for exp in exps:
+            co = exp.get("company", "")
+            for short, full in COMPANY_FIX.items():
+                if co.lower().startswith(short):
+                    co = full; break
+            p = doc.add_paragraph()
+            p.paragraph_format.space_before = Pt(4); p.paragraph_format.space_after = Pt(0)
+            keep_next(p); keep_lines(p)
+            tr = p.add_run(exp.get("title", exp.get("role", "")))
+            tr.bold = True; tr.font.size = Pt(10); tr.font.color.rgb = NAVY
+            sep = p.add_run("  —  "); sep.font.size = Pt(10); sep.font.color.rgb = NAVY
+            cor = p.add_run(co); cor.bold = True; cor.font.size = Pt(10); cor.font.color.rgb = NAVY
+            dp = doc.add_paragraph()
+            dp.paragraph_format.space_before = Pt(0); dp.paragraph_format.space_after = Pt(1)
+            keep_next(dp)
+            dr = dp.add_run(exp.get("period", "")); dr.font.size = Pt(9)
+            dr.italic = True; dr.font.color.rgb = LGRAY
+            bullets = exp.get("bullets", [])
+            for bi, b in enumerate(bullets):
+                bp = add_bullet(b)
+                if bi < 2 and bi < len(bullets) - 1:
+                    keep_next(bp)
 
-    # ── Education ── (冇學歷或係 placeholder 就唔印個 section)
+    # ── EARLIER EXPERIENCE ──
+    earlier = cv_data.get("earlier_experience", [])
+    if earlier:
+        section_heading("Earlier Experience")
+        for ei, e in enumerate(earlier):
+            p = doc.add_paragraph()
+            p.paragraph_format.space_before = Pt(0); p.paragraph_format.space_after = Pt(1)
+            p.paragraph_format.left_indent = Inches(0.1)
+            if ei < len(earlier) - 1:
+                keep_next(p)
+            r = p.add_run(f"• {e}"); r.font.size = Pt(9); r.font.color.rgb = DARK
+
+    # ── EDUCATION ── (跳過 placeholder)
     def _valid_edu(e):
         blob = f"{e.get('degree','')} {e.get('institution','')}".lower()
-        if not blob.strip():
-            return False
-        return not any(x in blob for x in ("not specified", "n/a", "未提供", "not provided"))
+        return blob.strip() and not any(x in blob for x in ("not specified", "n/a", "未提供", "not provided"))
     edu_list = [e for e in cv_data.get("education", []) if _valid_edu(e)]
     if edu_list:
-        section_title("Education")
-        for edu in edu_list:
-            body(f"{edu.get('degree','')} — {edu.get('institution','')} {edu.get('year','')}", size=9)
+        section_heading("Education")
+        for ei, edu in enumerate(edu_list):
+            p = doc.add_paragraph()
+            p.paragraph_format.space_before = Pt(3); p.paragraph_format.space_after = Pt(0)
+            keep_next(p)
+            dr = p.add_run(edu.get("degree", "")); dr.bold = True
+            dr.font.size = Pt(10); dr.font.color.rgb = BODY
+            ip = doc.add_paragraph()
+            ip.paragraph_format.space_before = Pt(0); ip.paragraph_format.space_after = Pt(2)
+            if ei < len(edu_list) - 1:
+                keep_next(ip)
+            period = edu.get("period", edu.get("year", ""))
+            ir = ip.add_run(f"{edu.get('institution','')}  |  {period}")
+            ir.font.size = Pt(9); ir.font.color.rgb = MED
 
-    # ── Additional ──
-    if cv_data.get("additional"):
-        section_title("Additional")
-        body(cv_data["additional"], size=9)
+    # ── CERTIFICATIONS ──
+    certs = [c for c in cv_data.get("certifications", []) if c and "not specified" not in c.lower()]
+    if certs:
+        section_heading("Certifications & Professional Development")
+        for ci, c in enumerate(certs):
+            bp = add_bullet(c, size=9)
+            if ci < len(certs) - 1:
+                keep_next(bp)
+
+    # ── LANGUAGES ──
+    if cv_data.get("languages"):
+        section_heading("Languages")
+        lp = add_body(cv_data["languages"], size=10, sa=2, color=DARK)
+        keep_next(lp)
+
+    # ── SALARY ──
+    if cv_data.get("salary"):
+        section_heading("Salary Expectation & Availability")
+        add_body(cv_data["salary"], size=10, sa=0, color=DARK)
 
     buf = io.BytesIO()
     doc.save(buf)
