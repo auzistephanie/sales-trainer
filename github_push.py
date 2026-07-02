@@ -77,8 +77,6 @@ def parse_remote(url):
 
 
 def get_token(remote_token):
-    if remote_token:
-        return remote_token
     for env in ("GITHUB_TOKEN", "GH_TOKEN"):
         if os.environ.get(env):
             return os.environ[env]
@@ -86,7 +84,7 @@ def get_token(remote_token):
     if os.path.isfile(tokfile):
         with open(tokfile) as f:
             return f.read().strip()
-    return None
+    return remote_token  # legacy fallback only — embedding tokens in remote URL is discouraged
 
 
 def api(method, path, token, body=None):
