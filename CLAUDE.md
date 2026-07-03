@@ -27,6 +27,8 @@ AI 生成面試場景，評估回答，追蹤進度，MBTI 個人化 coaching。
 
 `/addjob` · `/listjobs` · `/practice [難度]` · `/drill` · `/stats` · `/streak` · `/tip` · `/review` · `/negotiate` · `/debrief` · `/setup` · `/mystatus` · `/mbti` · `/help`
 
+（加/改指令後：同步更新上面呢行 + 探訪 set_webhook sync menu，見下面保命規則 1）
+
 ## ⚠️ 三條保命規則（詳情 `docs/RUNTIME_DEPLOY.md`）
 
 1. 加/改 bot 指令後**必須探訪** `https://sales-trainer-wheat.vercel.app/api/set_webhook` sync menu
