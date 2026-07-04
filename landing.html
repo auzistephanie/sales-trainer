@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI 面試教練 · 練到穩陣先去見工</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&family=Noto+Serif+TC:wght@600;700;900&family=Fraunces:ital,opsz,wght@1,9..144,600;1,9..144,900&display=swap" rel="stylesheet">
+<style>
+:root{
+  /* ---- 復古磚紅暖橙 palette ---- */
+  --cream:#f6efe0;
+  --cream-2:#efe4cf;
+  --brick:#c1503a;
+  --brick-dk:#9c3b28;
+  --orange:#c1683a;
+  --mustard:#c99a3c;
+  --forest:#2f4a3e;
+  --ink:#2a211a;
+  --ink-soft:#4a3c30;
+  --dark:#1f1a16;
+  --dark-2:#2a231d;
+  --paper:#fbf6ea;
+  --line:rgba(42,33,26,.14);
+  --shadow:rgba(42,33,26,.22);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{
+  font-family:"Noto Sans TC",system-ui,sans-serif;
+  color:var(--ink);
+  background:var(--cream);
+  overflow-x:hidden;
+  line-height:1.7;
+}
+h1,h2,h3{font-family:"Noto Serif TC",serif;line-height:1.25;letter-spacing:.01em}
+.num{font-family:"Fraunces",serif;font-style:italic;font-weight:900}
+a{color:inherit;text-decoration:none}
+section{position:relative}
+.wrap{max-width:1120px;margin:0 auto;padding:0 24px}
+
+/* ---------- NAV ---------- */
+.nav{
+  position:fixed;top:0;left:0;right:0;z-index:60;
+  display:flex;align-items:center;justify-content:space-between;
+  padding:14px 26px;
+  background:rgba(246,239,224,.82);
+  backdrop-filter:blur(10px);
+  border-bottom:1px solid var(--line);
+  transition:background .5s,color .5s,border-color .5s;
+}
+.nav.zone-dark{background:rgba(31,26,22,.72);color:var(--cream);border-color:rgba(246,239,224,.16)}
+.nav__logo{display:flex;align-items:center;gap:10px;font-family:"Noto Serif TC";font-weight:900;font-size:19px}
+.nav__badge{width:34px;height:34px;border-radius:9px;background:var(--brick);display:grid;place-items:center;color:var(--cream);font-size:18px;box-shadow:2px 2px 0 var(--ink)}
+.nav.zone-dark .nav__badge{box-shadow:2px 2px 0 var(--mustard)}
+.nav__links{display:flex;gap:26px;align-items:center;font-size:14.5px;font-weight:500}
+.nav__links a{opacity:.82;transition:opacity .3s}
+.nav__links a:hover{opacity:1}
+.nav__cta{
+  padding:9px 18px;border-radius:999px;background:var(--brick);color:var(--cream)!important;
+  font-weight:700;box-shadow:2px 2px 0 var(--ink);transition:transform .18s,box-shadow .18s;opacity:1!important
+}
+.nav__cta:hover{transform:translate(-1px,-1px);box-shadow:4px 4px 0 var(--ink)}
+.nav.zone-dark .nav__cta{background:var(--mustard);color:var(--ink)!important;box-shadow:2px 2px 0 #000}
+@media(max-width:760px){.nav__links a:not(.nav__cta){display:none}}
+
+/* ---------- progress rail ---------- */
+.rail{position:fixed;top:50%;right:26px;transform:translateY(-50%);z-index:55;display:flex;flex-direction:column;align-items:center;gap:0}
+.rail__line{position:absolute;top:0;bottom:0;width:2px;left:50%;transform:translateX(-50%);
+  background:repeating-linear-gradient(var(--ink) 0 4px,transparent 4px 9px);opacity:.35}
+.rail__dot{position:relative;width:13px;height:13px;margin:15px 0;border-radius:50%;
+  border:2px solid var(--ink);background:var(--cream);cursor:pointer;transition:all .3s;z-index:2}
+.rail__dot.active{background:var(--brick);border-color:var(--brick);transform:scale(1.25)}
+.rail__dot span{position:absolute;right:24px;top:50%;transform:translateY(-50%);white-space:nowrap;
+  font-size:12px;font-weight:600;background:var(--ink);color:var(--cream);padding:3px 9px;border-radius:6px;
+  opacity:0;pointer-events:none;transition:opacity .25s}
+.rail__dot:hover span{opacity:1}
+.rail__icon{position:fixed;right:20px;font-size:22px;transition:top .15s linear;z-index:3;filter:drop-shadow(1px 1px 0 rgba(0,0,0,.25))}
+@media(max-width:900px){.rail,.rail__icon{display:none}}
+
+/* ---------- reveal ---------- */
+.reveal{opacity:0;transform:translateY(34px);transition:opacity .8s cubic-bezier(.2,.7,.2,1),transform .8s cubic-bezier(.2,.7,.2,1)}
+.reveal.show{opacity:1;transform:none}
+.reveal.zoom{transform:scale(.9)}.reveal.zoom.show{transform:none}
+.reveal.slide-l{transform:translateX(-46px)}.reveal.slide-l.show{transform:none}
+.reveal.slide-r{transform:translateX(46px)}.reveal.slide-r.show{transform:none}
+.d1{transition-delay:.1s}.d2{transition-delay:.22s}.d3{transition-delay:.34s}.d4{transition-delay:.46s}
+
+/* ---------- HERO ---------- */
+.hero{min-height:100vh;padding:120px 0 60px;display:flex;align-items:center;
+  background:
+    radial-gradient(120% 80% at 80% -10%,rgba(201,154,60,.32),transparent 55%),
+    linear-gradient(160deg,#f0dcc0 0%,var(--cream) 55%,#eddcc4 100%);
+  overflow:hidden}
+.hero__grid{display:grid;grid-template-columns:1.05fr .95fr;gap:40px;align-items:center;width:100%}
+.hero__eyebrow{display:inline-flex;align-items:center;gap:9px;font-weight:700;font-size:14px;
+  color:var(--brick-dk);background:rgba(193,80,58,.12);padding:7px 15px;border-radius:999px;margin-bottom:22px;border:1px solid rgba(193,80,58,.25)}
+.hero__eyebrow b{width:7px;height:7px;border-radius:50%;background:var(--brick);animation:blip 1.6s infinite}
+@keyframes blip{0%,100%{opacity:1}50%{opacity:.25}}
+.hero h1{font-size:clamp(38px,6vw,68px);font-weight:900;color:var(--ink);margin-bottom:20px}
+.hero h1 em{font-style:normal;color:var(--brick);position:relative;white-space:nowrap}
+.hero h1 em::after{content:"";position:absolute;left:0;right:0;bottom:6px;height:12px;background:rgba(201,154,60,.5);z-index:-1;transform:rotate(-1deg)}
+.hero__sub{font-size:clamp(16px,2vw,19px);color:var(--ink-soft);max-width:520px;margin-bottom:30px}
+.hero__cta{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:38px}
+.btn{position:relative;overflow:hidden;display:inline-flex;align-items:center;gap:9px;
+  padding:15px 28px;border-radius:12px;font-weight:700;font-size:16px;cursor:pointer;border:none;
+  transition:transform .18s,box-shadow .18s}
+.btn--primary{background:var(--brick);color:var(--cream);box-shadow:4px 4px 0 var(--ink)}
+.btn--primary:hover{transform:translate(-2px,-2px);box-shadow:7px 7px 0 var(--ink)}
+.btn--primary::after{content:"";position:absolute;top:0;left:-120%;width:60%;height:100%;
+  background:linear-gradient(100deg,transparent,rgba(255,255,255,.5),transparent);transform:skewX(-18deg);animation:shine 3.6s infinite}
+@keyframes shine{0%{left:-120%}45%,100%{left:160%}}
+.btn--ghost{background:transparent;color:var(--ink);border:2px solid var(--ink);box-shadow:4px 4px 0 rgba(42,33,26,.18)}
+.btn--ghost:hover{transform:translate(-2px,-2px);box-shadow:6px 6px 0 rgba(42,33,26,.25)}
+.hero__stats{display:flex;gap:30px;flex-wrap:wrap}
+.hero__stats div{display:flex;flex-direction:column}
+.hero__stats .num{font-size:34px;color:var(--brick-dk);line-height:1}
+.hero__stats small{font-size:13px;color:var(--ink-soft);font-weight:500;margin-top:5px}
+
+/* ---- hero phone card ---- */
+.phone{position:relative;justify-self:center;width:290px;height:560px;border-radius:38px;
+  background:var(--dark);padding:14px;box-shadow:0 30px 60px -18px var(--shadow),0 0 0 2px var(--ink);transform:rotate(2deg)}
+.phone__screen{width:100%;height:100%;border-radius:26px;background:var(--paper);overflow:hidden;display:flex;flex-direction:column}
+.phone__bar{background:var(--brick);color:var(--cream);padding:14px 16px;display:flex;align-items:center;gap:10px;font-weight:700;font-size:14px}
+.phone__bar .av{width:30px;height:30px;border-radius:8px;background:var(--mustard);display:grid;place-items:center;color:var(--ink)}
+.phone__body{flex:1;padding:14px;display:flex;flex-direction:column;gap:11px;background:linear-gradient(var(--cream-2),var(--paper))}
+.bubble{max-width:82%;padding:10px 13px;border-radius:14px;font-size:13px;line-height:1.55;box-shadow:1px 2px 5px rgba(0,0,0,.08)}
+.bubble.bot{background:#fff;border-bottom-left-radius:4px;align-self:flex-start}
+.bubble.me{background:var(--forest);color:var(--cream);border-bottom-right-radius:4px;align-self:flex-end}
+.bubble.score{background:var(--mustard);color:var(--ink);align-self:flex-start;font-weight:700}
+.phone__float{position:absolute;padding:8px 13px;border-radius:11px;background:#fff;font-size:12px;font-weight:700;
+  box-shadow:0 8px 20px -6px var(--shadow);border:1.5px solid var(--ink)}
+.phone__float.a{top:24px;left:-42px;color:var(--brick-dk);animation:bob 4s ease-in-out infinite}
+.phone__float.b{bottom:70px;right:-40px;color:var(--forest);animation:bob 4s ease-in-out infinite .8s}
+@keyframes bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-9px)}}
+@media(max-width:900px){.hero__grid{grid-template-columns:1fr;gap:10px}.phone{margin-top:20px;transform:none}}
+
+/* ---------- MARQUEE ---------- */
+.marquee{background:var(--forest);color:var(--cream);padding:16px 0;overflow:hidden;border-top:3px solid var(--ink);border-bottom:3px solid var(--ink)}
+.marquee__track{display:flex;gap:0;white-space:nowrap;width:max-content;animation:scrollx 26s linear infinite}
+.marquee__track span{font-family:"Noto Serif TC";font-weight:700;font-size:20px;padding:0 26px;display:inline-flex;align-items:center;gap:26px}
+.marquee__track span::after{content:"✦";color:var(--mustard);font-size:14px}
+@keyframes scrollx{to{transform:translateX(-50%)}}
+
+/* ---------- generic scene ---------- */
+.scene{padding:96px 0}
+.scene__tag{display:inline-block;font-family:"Fraunces";font-style:italic;font-weight:600;font-size:15px;letter-spacing:.14em;margin-bottom:12px}
+.scene__title{font-size:clamp(28px,4.4vw,46px);font-weight:900;margin-bottom:16px}
+.scene__lead{max-width:560px;font-size:17px;margin-bottom:44px}
+
+/* STOP 01 dark */
+.stop1{background:radial-gradient(130% 90% at 15% 0%,#33291f,var(--dark) 60%);color:var(--cream)}
+.stop1 .scene__tag{color:var(--mustard)}
+.stop1 .scene__lead{color:rgba(246,239,224,.72)}
+.feat{display:grid;grid-template-columns:repeat(2,1fr);gap:22px}
+.feat__card{position:relative;background:rgba(246,239,224,.05);border:1px solid rgba(246,239,224,.14);
+  border-radius:18px;padding:28px 26px;overflow:hidden;transition:transform .28s,border-color .28s,background .28s}
+.feat__card:hover{transform:translateY(-6px) rotate(-.4deg);border-color:var(--mustard);background:rgba(246,239,224,.08)}
+.feat__ic{width:52px;height:52px;border-radius:13px;display:grid;place-items:center;font-size:26px;margin-bottom:18px;box-shadow:3px 3px 0 rgba(0,0,0,.4)}
+.feat__card h3{font-size:21px;margin-bottom:9px;color:var(--cream)}
+.feat__card p{font-size:14.5px;color:rgba(246,239,224,.7);line-height:1.65}
+.feat__no{position:absolute;top:16px;right:20px;font-family:"Fraunces";font-style:italic;font-size:40px;color:rgba(246,239,224,.1)}
+@media(max-width:760px){.feat{grid-template-columns:1fr}}
+
+/* STOP 02 花磚老宅 postcards */
+.stop2{position:relative;background:var(--cream);overflow:hidden}
+.stop2__floor{position:absolute;inset:0;opacity:.16;pointer-events:none}
+.stop2 .wrap{position:relative;z-index:2}
+.cards{display:grid;grid-template-columns:repeat(3,1fr);gap:26px}
+.postcard{position:relative;background:var(--paper);border-radius:6px;padding:0;overflow:hidden;
+  box-shadow:0 14px 30px -14px var(--shadow),0 0 0 1px var(--line);transition:transform .3s,box-shadow .3s}
+.postcard:hover{transform:translateY(-8px) rotate(-.6deg);box-shadow:0 24px 44px -16px var(--shadow),0 0 0 1px var(--line)}
+.postcard__top{height:120px;display:grid;place-items:center;position:relative;border-bottom:2px dashed var(--line)}
+.postcard__stamp{position:absolute;top:10px;right:10px;width:44px;height:52px;border-radius:4px;background:var(--cream);
+  border:2px solid var(--ink);display:grid;place-items:center;font-size:22px;transform:rotate(6deg);box-shadow:1px 1px 0 var(--ink)}
+.postcard__ic{font-size:46px}
+.postcard__body{padding:20px 22px 24px}
+.postcard__body h3{font-size:20px;margin-bottom:8px}
+.postcard__body p{font-size:14px;color:var(--ink-soft);line-height:1.6;margin-bottom:12px}
+.postcard__cmd{display:inline-block;font-family:"Fraunces";font-style:italic;font-weight:600;font-size:14px;
+  color:var(--cream);background:var(--forest);padding:3px 12px;border-radius:999px}
+.postcard__pm{position:absolute;bottom:0;left:0;right:0;height:5px;
+  background:repeating-linear-gradient(90deg,var(--brick) 0 12px,var(--mustard) 12px 24px)}
+@media(max-width:900px){.cards{grid-template-columns:1fr 1fr}}
+@media(max-width:600px){.cards{grid-template-columns:1fr}}
+
+/* STOP 03 how it works */
+.stop3{background:linear-gradient(165deg,#2f4a3e,#25382f);color:var(--cream)}
+.stop3 .scene__tag{color:var(--mustard)}
+.stop3 .scene__lead{color:rgba(246,239,224,.72)}
+.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:0;position:relative}
+.step{position:relative;padding:0 26px;text-align:center}
+.step__n{width:74px;height:74px;margin:0 auto 20px;border-radius:50%;background:var(--mustard);color:var(--ink);
+  font-family:"Fraunces";font-style:italic;font-weight:900;font-size:34px;display:grid;place-items:center;
+  box-shadow:4px 4px 0 rgba(0,0,0,.35);position:relative;z-index:2}
+.step h3{font-size:20px;margin-bottom:9px}
+.step p{font-size:14.5px;color:rgba(246,239,224,.72)}
+.step code{background:rgba(246,239,224,.12);padding:2px 9px;border-radius:6px;font-family:"Fraunces";font-style:italic;color:var(--mustard)}
+.steps__line{position:absolute;top:37px;left:16%;right:16%;height:3px;
+  background:repeating-linear-gradient(90deg,var(--mustard) 0 9px,transparent 9px 18px);opacity:.55;z-index:1}
+@media(max-width:760px){.steps{grid-template-columns:1fr;gap:40px}.steps__line{display:none}}
+
+/* GATE / boarding pass contact */
+.gate{background:radial-gradient(120% 100% at 50% 0%,#2a231d,var(--dark));color:var(--cream);padding:96px 0 70px;position:relative;overflow:hidden}
+.gate .scene__tag{color:var(--mustard)}
+.pass{max-width:720px;margin:36px auto 0;background:var(--paper);color:var(--ink);border-radius:16px;
+  display:grid;grid-template-columns:1fr 220px;overflow:hidden;box-shadow:0 30px 60px -20px rgba(0,0,0,.6);position:relative}
+.pass::before,.pass::after{content:"";position:absolute;top:50%;transform:translateY(-50%);width:24px;height:24px;border-radius:50%;background:var(--dark)}
+.pass::before{left:calc(220px - 12px + .5px);}
+.pass__main{padding:30px 32px;position:relative}
+.pass__hd{display:flex;justify-content:space-between;align-items:center;border-bottom:2px dashed var(--line);padding-bottom:14px;margin-bottom:16px}
+.pass__hd b{font-family:"Noto Serif TC";font-size:19px}
+.pass__hd span{font-family:"Fraunces";font-style:italic;color:var(--brick);font-weight:600}
+.pass__rows{display:grid;grid-template-columns:1fr 1fr;gap:14px 20px;margin-bottom:20px}
+.pass__rows small{display:block;font-size:11px;letter-spacing:.12em;color:var(--ink-soft);text-transform:uppercase;margin-bottom:2px}
+.pass__rows b{font-family:"Noto Serif TC";font-size:16px}
+.pass__stub{background:var(--brick);color:var(--cream);padding:26px 22px;display:flex;flex-direction:column;justify-content:space-between;
+  border-left:2px dashed rgba(246,239,224,.5)}
+.pass__stub .num{font-size:26px}
+.pass__barcode{height:40px;background:repeating-linear-gradient(90deg,var(--cream) 0 2px,transparent 2px 3px,var(--cream) 3px 6px,transparent 6px 9px);border-radius:2px;margin-top:10px}
+.pass__go{display:inline-block;margin-top:16px;background:var(--mustard);color:var(--ink);font-weight:700;text-align:center;padding:11px;border-radius:10px;box-shadow:3px 3px 0 rgba(0,0,0,.35);transition:transform .18s}
+.pass__go:hover{transform:translate(-1px,-1px)}
+.stamp{position:absolute;bottom:18px;right:30px;border:4px double var(--brick);color:var(--brick);
+  font-family:"Noto Serif TC";font-weight:900;font-size:22px;padding:6px 16px;border-radius:8px;transform:rotate(-14deg) scale(0);
+  opacity:.85;transition:transform .6s cubic-bezier(.2,2.2,.4,1)}
+.stamp.hit{transform:rotate(-14deg) scale(1)}
+@media(max-width:640px){.pass{grid-template-columns:1fr}.pass::before,.pass::after{display:none}.pass__stub{border-left:none;border-top:2px dashed rgba(246,239,224,.5)}}
+
+/* footer */
+.footer{background:var(--dark-2);color:rgba(246,239,224,.7);padding:40px 0;text-align:center;font-size:14px;border-top:3px solid var(--ink)}
+.footer b{color:var(--cream);font-family:"Noto Serif TC"}
+.footer a{color:var(--mustard)}
+
+/* scroll hint */
+.hint{position:absolute;bottom:26px;left:50%;transform:translateX(-50%);width:24px;height:38px;border:2px solid var(--ink-soft);border-radius:14px;display:flex;justify-content:center;padding-top:7px;opacity:.6}
+.hint span{width:4px;height:8px;background:var(--ink-soft);border-radius:2px;animation:wheel 1.6s infinite}
+@keyframes wheel{0%{opacity:1;transform:translateY(0)}70%{opacity:0;transform:translateY(11px)}100%{opacity:0}}
+
+@media(prefers-reduced-motion:reduce){
+  *{animation:none!important;transition:none!important}
+  .reveal{opacity:1!important;transform:none!important}
+  .stamp{transform:rotate(-14deg) scale(1)!important}
+}
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav class="nav" id="nav">
+  <a class="nav__logo" href="#top"><span class="nav__badge">🎯</span>面試教練</a>
+  <div class="nav__links">
+    <a href="#features">功能</a>
+    <a href="#jobkit">求職組</a>
+    <a href="#how">點用</a>
+    <a href="#contact" class="nav__cta">免費開始</a>
+  </div>
+</nav>
+
+<!-- progress rail -->
+<div class="rail" id="rail">
+  <div class="rail__line"></div>
+  <div class="rail__dot" data-target="#top"><span>啟程</span></div>
+  <div class="rail__dot" data-target="#features"><span>核心功能</span></div>
+  <div class="rail__dot" data-target="#jobkit"><span>求職功能組</span></div>
+  <div class="rail__dot" data-target="#how"><span>三步上手</span></div>
+  <div class="rail__dot" data-target="#contact"><span>登機</span></div>
+</div>
+<div class="rail__icon" id="railIcon">🎯</div>
+
+<!-- HERO -->
+<section class="hero" id="top" data-zone="light">
+  <div class="wrap hero__grid">
+    <div>
+      <span class="hero__eyebrow reveal"><b></b>Telegram 上嘅 AI 面試特訓</span>
+      <h1 class="reveal d1">見工之前，<br>先同 AI <em>練到穩陣</em></h1>
+      <p class="hero__sub reveal d2">AI 即場生成貼身面試場景，逐題評分、指出弱點，仲會跟你嘅 MBTI 性格度身 coaching。由行為題練到薪酬談判，一個 Telegram bot 搞掂。</p>
+      <div class="hero__cta reveal d3">
+        <a href="#contact" class="btn btn--primary">🚀 免費開始練習</a>
+        <a href="#features" class="btn btn--ghost">睇下有咩功能</a>
+      </div>
+      <div class="hero__stats reveal d4">
+        <div><span class="num">30+</span><small>面試題型場景</small></div>
+        <div><span class="num">16</span><small>MBTI 個人化 coaching</small></div>
+        <div><span class="num">24/7</span><small>隨時開練 · 追蹤進度</small></div>
+      </div>
+    </div>
+    <div class="reveal zoom d2" data-plx="-0.05">
+      <div class="phone">
+        <div class="phone__float a">即時評分 ★</div>
+        <div class="phone__float b">連續練習 7 日 🔥</div>
+        <div class="phone__screen">
+          <div class="phone__bar"><span class="av">🎯</span>AI 面試教練</div>
+          <div class="phone__body">
+            <div class="bubble bot">📋 情境：你申請 PM 職位，面試官問「講一次你搞砸咗嘅 project」。</div>
+            <div class="bubble me">我會用 STAR 講一次真實例子，focus 喺我學到咩同點補救…</div>
+            <div class="bubble score">評分 82/100 ✦ 結構清晰，建議加多啲量化成果</div>
+            <div class="bubble bot">🎁 下一題已 unlock，keep going！</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="hint"><span></span></div>
+</section>
+
+<!-- MARQUEE -->
+<div class="marquee" aria-hidden="true">
+  <div class="marquee__track" id="marquee">
+    <span>行為題</span><span>壓力面試</span><span>Case Study</span><span>薪酬談判</span><span>MBTI Coaching</span><span>STAR 結構</span><span>即時評分</span><span>面試覆盤</span>
+  </div>
+</div>
+
+<!-- STOP 01 features -->
+<section class="scene stop1" id="features" data-zone="dark">
+  <div class="wrap">
+    <span class="scene__tag reveal">STOP 01 · 核心引擎</span>
+    <h2 class="scene__title reveal d1">唔係死背 model answer，<br>係練到識即場反應</h2>
+    <p class="scene__lead reveal d2">每次都係 AI 新鮮生成嘅場景，逼你真正思考、開口作答，再攞到具體評分同改善方向。</p>
+    <div class="feat">
+      <div class="feat__card reveal slide-l"><span class="feat__no">01</span>
+        <div class="feat__ic" style="background:var(--brick)">🎬</div>
+        <h3>AI 場景生成</h3>
+        <p>按職位、難度、題型池即場砌出貼身面試情境，永遠唔會撞返同一條，練到真係識應變。</p>
+      </div>
+      <div class="feat__card reveal slide-r"><span class="feat__no">02</span>
+        <div class="feat__ic" style="background:var(--mustard)">📊</div>
+        <h3>即時 AI 評分</h3>
+        <p>逐個回答評分，指出結構、內容、量化成果邊度弱，畀到可以即刻改嘅具體建議。</p>
+      </div>
+      <div class="feat__card reveal slide-l d1"><span class="feat__no">03</span>
+        <div class="feat__ic" style="background:var(--forest)">🔥</div>
+        <h3>進度 · 連勝追蹤</h3>
+        <p><code style="color:inherit">/stats</code> 睇成長曲線，<code style="color:inherit">/streak</code> 追連續練習日，遊戲化令你練得落。</p>
+      </div>
+      <div class="feat__card reveal slide-r d1"><span class="feat__no">04</span>
+        <div class="feat__ic" style="background:var(--orange)">🧭</div>
+        <h3>MBTI 個人化 coaching</h3>
+        <p>做完 <code style="color:inherit">/mbti</code> 20 題檢測，教練會照你性格強弱項調整提示同鼓勵方式。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- STOP 02 jobkit postcards -->
+<section class="scene stop2" id="jobkit" data-zone="light">
+  <svg class="stop2__floor" width="100%" height="100%" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+    <defs>
+      <pattern id="tileA" width="80" height="80" patternUnits="userSpaceOnUse">
+        <rect width="80" height="80" fill="#f6efe0"/>
+        <g fill="#c1683a"><path d="M40 12 C46 24 46 32 40 40 C34 32 34 24 40 12Z"/><path d="M40 68 C46 56 46 48 40 40 C34 48 34 56 40 68Z"/><path d="M12 40 C24 34 32 34 40 40 C32 46 24 46 12 40Z"/><path d="M68 40 C56 34 48 34 40 40 C48 46 56 46 68 40Z"/></g>
+        <g fill="#c1503a"><path d="M20 20 C30 22 36 28 40 40 C28 36 22 30 20 20Z"/><path d="M60 20 C58 30 52 36 40 40 C44 28 50 22 60 20Z"/><path d="M20 60 C22 50 28 44 40 40 C36 52 30 58 20 60Z"/><path d="M60 60 C50 58 44 52 40 40 C52 44 58 50 60 60Z"/></g>
+        <circle cx="40" cy="40" r="6" fill="#c99a3c"/>
+        <g fill="#2f4a3e"><path d="M0 0 L14 0 A14 14 0 0 1 0 14Z"/><path d="M80 0 L80 14 A14 14 0 0 1 66 0Z"/><path d="M0 80 L0 66 A14 14 0 0 1 14 80Z"/><path d="M80 80 L66 80 A14 14 0 0 1 80 66Z"/></g>
+      </pattern>
+    </defs>
+    <rect width="100%" height="100%" fill="url(#tileA)"/>
+  </svg>
+  <div class="wrap">
+    <span class="scene__tag reveal" style="color:var(--brick-dk)">STOP 02 · 求職功能組</span>
+    <h2 class="scene__title reveal d1" style="color:var(--ink)">由 CV 到 offer，<br>五張「求職明信片」跟住你</h2>
+    <p class="scene__lead reveal d2" style="color:var(--ink-soft)">面試練得掂，其他關卡都要顧。呢五個功能各司其職，一路陪你行到最後拎 offer。</p>
+    <div class="cards">
+      <div class="postcard reveal zoom">
+        <div class="postcard__top" style="background:rgba(193,80,58,.12)"><span class="postcard__stamp">🩺</span><span class="postcard__ic">📄</span></div>
+        <div class="postcard__body"><h3>CV Health</h3><p>AI 體檢你份 CV，揪出弱位同 red flag，畀到可以即刻改嘅具體建議。</p><span class="postcard__cmd">/review</span></div>
+        <div class="postcard__pm"></div>
+      </div>
+      <div class="postcard reveal zoom d1">
+        <div class="postcard__top" style="background:rgba(201,154,60,.16)"><span class="postcard__stamp">💰</span><span class="postcard__ic">📈</span></div>
+        <div class="postcard__body"><h3>Salary 情報</h3><p>睇同職位市場薪酬範圍，入場前心中有數，唔會叫少咗或者嚇親對方。</p><span class="postcard__cmd">/salary</span></div>
+        <div class="postcard__pm"></div>
+      </div>
+      <div class="postcard reveal zoom d2">
+        <div class="postcard__top" style="background:rgba(47,74,62,.14)"><span class="postcard__stamp">🤖</span><span class="postcard__ic">✅</span></div>
+        <div class="postcard__body"><h3>ATS 檢查</h3><p>模擬招聘系統點 scan 你份 CV，確保關鍵字對版、格式過到機器篩選。</p><span class="postcard__cmd">/ats</span></div>
+        <div class="postcard__pm"></div>
+      </div>
+      <div class="postcard reveal zoom d1">
+        <div class="postcard__top" style="background:rgba(193,104,58,.15)"><span class="postcard__stamp">🤝</span><span class="postcard__ic">💬</span></div>
+        <div class="postcard__body"><h3>Negotiate 談判</h3><p>拎到 offer 之後點傾人工？AI 幫你 rehearse 談判對白同 counter 策略。</p><span class="postcard__cmd">/negotiate</span></div>
+        <div class="postcard__pm"></div>
+      </div>
+      <div class="postcard reveal zoom d2">
+        <div class="postcard__top" style="background:rgba(193,80,58,.12)"><span class="postcard__stamp">🔍</span><span class="postcard__ic">📝</span></div>
+        <div class="postcard__body"><h3>Debrief 覆盤</h3><p>面試完即刻覆盤：邊題答得好、邊題可以點執，下次同類問題更穩。</p><span class="postcard__cmd">/debrief</span></div>
+        <div class="postcard__pm"></div>
+      </div>
+      <div class="postcard reveal zoom d3" style="display:grid;place-items:center;background:var(--forest);color:var(--cream)">
+        <div style="text-align:center;padding:30px 20px">
+          <div style="font-size:40px;margin-bottom:10px">🎓</div>
+          <h3 style="color:var(--cream);margin-bottom:8px">一站到底</h3>
+          <p style="color:rgba(246,239,224,.8);font-size:14px">練習 + 求職工具，全部喺同一個 bot，唔使開十個 app。</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- STOP 03 how -->
+<section class="scene stop3" id="how" data-zone="dark">
+  <div class="wrap">
+    <span class="scene__tag reveal">STOP 03 · 三步上手</span>
+    <h2 class="scene__title reveal d1">三步就開練，冇任何門檻</h2>
+    <p class="scene__lead reveal d2">唔使裝 app、唔使開戶口。打開 Telegram，加 bot，即刻練。</p>
+    <div class="steps">
+      <div class="steps__line"></div>
+      <div class="step reveal d1"><div class="step__n">1</div><h3>加入 Bot</h3><p>喺 Telegram 搵到教練，撳 <code>/start</code> 即刻上線。</p></div>
+      <div class="step reveal d2"><div class="step__n">2</div><h3>開始練習</h3><p>打 <code>/practice</code> 揀難度，AI 即場出場景，逐題答逐題評。</p></div>
+      <div class="step reveal d3"><div class="step__n">3</div><h3>睇進度</h3><p><code>/stats</code> 睇成長、<code>/streak</code> 守連勝，練到見工果日。</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- GATE / contact boarding pass -->
+<section class="gate" id="contact" data-zone="dark">
+  <div class="wrap" style="text-align:center">
+    <span class="scene__tag reveal">最後一站 · 登機</span>
+    <h2 class="scene__title reveal d1" style="color:var(--cream)">攞你嘅「面試通行證」</h2>
+    <p class="scene__lead reveal d2" style="margin:0 auto;color:rgba(246,239,224,.75)">由今日開始練，見工果日你會多謝自己。免費上手，隨時開始。</p>
+    <div class="pass reveal zoom d2">
+      <div class="pass__main">
+        <div class="pass__hd"><b>🎯 面試教練 · BOARDING PASS</b><span>PRACTICE</span></div>
+        <div class="pass__rows">
+          <div><small>Passenger 練習生</small><b>你 / Future Hire</b></div>
+          <div><small>Destination 目的地</small><b>Dream Offer ✦</b></div>
+          <div><small>Gate 登機口</small><b>Telegram</b></div>
+          <div><small>Boarding 開始</small><b>即刻 / NOW</b></div>
+        </div>
+        <a href="#contact" class="btn btn--primary" style="box-shadow:4px 4px 0 var(--brick-dk)">🚀 免費開始練習</a>
+        <div class="stamp" id="stamp">已錄取</div>
+      </div>
+      <div class="pass__stub">
+        <div>
+          <small style="opacity:.8">SEAT</small>
+          <div class="num">A1</div>
+        </div>
+        <div>
+          <div class="pass__barcode"></div>
+          <a href="#contact" class="pass__go">GO ▸</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer class="footer">
+  <div class="wrap">
+    <p><b>🎯 AI 面試教練</b> · 練到穩陣先去見工</p>
+    <p style="margin-top:8px">聯絡：<a href="#contact">填返你嘅 Telegram bot 連結</a> · © 2026</p>
+  </div>
+</footer>
+
+<script>
+(function(){
+  var reduce = window.matchMedia('(prefers-reduced-motion:reduce)').matches;
+
+  /* marquee duplicate */
+  var mq = document.getElementById('marquee');
+  if(mq){ mq.innerHTML += mq.innerHTML; }
+
+  /* reveal observer */
+  var revObs = new IntersectionObserver(function(es){
+    es.forEach(function(e){ if(e.isIntersecting){ e.target.classList.add('show'); revObs.unobserve(e.target);} });
+  },{threshold:.16});
+  document.querySelectorAll('.reveal').forEach(function(el){ revObs.observe(el); });
+
+  /* stamp one-shot */
+  var stamp = document.getElementById('stamp');
+  if(stamp){
+    var sObs = new IntersectionObserver(function(es){
+      es.forEach(function(e){ if(e.isIntersecting){ setTimeout(function(){stamp.classList.add('hit');},350); sObs.disconnect(); } });
+    },{threshold:.5});
+    sObs.observe(stamp);
+  }
+
+  /* zones + rail + parallax on one rAF handler */
+  var nav = document.getElementById('nav');
+  var zones = Array.prototype.slice.call(document.querySelectorAll('[data-zone]'));
+  var dots = Array.prototype.slice.call(document.querySelectorAll('.rail__dot'));
+  var railIcon = document.getElementById('railIcon');
+  var plx = Array.prototype.slice.call(document.querySelectorAll('[data-plx]'));
+  var secIds = ['#top','#features','#jobkit','#how','#contact'];
+  var ticking=false;
+
+  dots.forEach(function(d){ d.addEventListener('click',function(){
+    var t=document.querySelector(d.getAttribute('data-target')); if(t) t.scrollIntoView({behavior:'smooth'});
+  });});
+
+  function frame(){
+    ticking=false;
+    var mid = window.innerHeight/2;
+    /* active zone */
+    var cur=zones[0];
+    zones.forEach(function(z){ var r=z.getBoundingClientRect(); if(r.top<=mid && r.bottom>=mid) cur=z; });
+    var zone = cur.getAttribute('data-zone');
+    nav.classList.toggle('zone-dark', zone==='dark');
+
+    /* rail active dot */
+    var idx=0;
+    secIds.forEach(function(id,i){ var el=document.querySelector(id); if(el){ var r=el.getBoundingClientRect(); if(r.top<=mid) idx=i; }});
+    dots.forEach(function(d,i){ d.classList.toggle('active', i===idx); });
+
+    /* rail icon vertical position by scroll % */
+    if(railIcon){
+      var sc = window.scrollY/(document.body.scrollHeight-window.innerHeight||1);
+      sc=Math.max(0,Math.min(1,sc));
+      var railEl=document.getElementById('rail');
+      var rb=railEl.getBoundingClientRect();
+      railIcon.style.top=(rb.top+sc*rb.height-11)+'px';
+    }
+
+    /* parallax */
+    if(!reduce){
+      plx.forEach(function(el){
+        var f=parseFloat(el.getAttribute('data-plx'))||0;
+        var r=el.getBoundingClientRect();
+        var dist=(r.top+r.height/2)-window.innerHeight/2;
+        el.style.transform='translateY('+(dist*f)+'px)';
+      });
+    }
+  }
+  function onScroll(){ if(!ticking){ ticking=true; requestAnimationFrame(frame); } }
+  window.addEventListener('scroll',onScroll,{passive:true});
+  window.addEventListener('resize',onScroll);
+  frame();
+})();
+</script>
+</body>
+</html>
