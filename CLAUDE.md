@@ -22,6 +22,15 @@ AI 生成面試場景，評估回答，追蹤進度，MBTI 個人化 coaching。
 - `mbti_checker.py` — MBTI 20題檢測（`/mbti`）· `utils.py` — Redis I/O、Telegram 發送
 - `job_crm.py` + `pages/` — Streamlit 求職 CRM（https://sales-trainer-jatucpwszxyvoq5kpt7bav.streamlit.app）
 - `github_push.py` — push 用呢個，唔用 git CLI：`python3 github_push.py "<msg>"`
+- `landing.html` — 復古滾動旅程 landing page（Vercel 靜態，`/landing.html`）
+- `webapp/` — **真 App（Web/PWA）**：Vite React 前端 + Flask AI API，Google 登入，跨裝置同步。詳見 `docs/APP_SPEC.md`
+
+## Web App（webapp/，Telegram bot 之外嘅獨立產品）
+
+- 由 Telegram bot → 真 app，**加建唔取代**，bot + Redis 照舊運作。
+- 前端 `webapp/src/`（Vite React），API `webapp/api/index.py`（Flask，包 `interview_trainer.py`，copy 入 `api/_lib/` + shim `utils.py` 去走 Redis/Telegram）。
+- **登入**：Supabase Auth（Google only）。**資料**：Supabase Postgres，共用 project `cmtubaxlniglklmdwlzs`，所有 table `coach_` 前綴 + RLS（`user_id = auth.uid()`）。**AI**：DeepSeek 不變。
+- 部署：Vercel **新 project**，Root Directory = `webapp`，env 要 `DEEPSEEK_API_KEY`。schema/API 對照見 `docs/APP_SPEC.md`。
 
 ## Bot 指令
 

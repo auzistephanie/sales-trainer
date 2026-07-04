@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>面試教練 App · 互動原型</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&family=Noto+Serif+TC:wght@600;700;900&family=Fraunces:ital,opsz,wght@1,9..144,600;1,9..144,900&display=swap" rel="stylesheet">
+<style>
+:root{
+  --cream:#f6efe0;--cream-2:#efe4cf;--brick:#c1503a;--brick-dk:#9c3b28;
+  --orange:#c1683a;--mustard:#c99a3c;--forest:#2f4a3e;--ink:#2a211a;
+  --ink-soft:#4a3c30;--dark:#1f1a16;--paper:#fbf6ea;--line:rgba(42,33,26,.12);
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+body{font-family:"Noto Sans TC",system-ui,sans-serif;color:var(--ink);
+  background:radial-gradient(120% 90% at 50% 0%,#efe0c8,#e4d3b8 70%);
+  min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:26px 16px 40px}
+h1,h2,h3{font-family:"Noto Serif TC",serif;line-height:1.25}
+.num{font-family:"Fraunces",serif;font-style:italic;font-weight:900}
+
+.head{text-align:center;margin-bottom:20px;max-width:640px}
+.head .tag{display:inline-block;font-family:"Fraunces";font-style:italic;color:var(--brick-dk);
+  font-weight:600;letter-spacing:.1em;margin-bottom:6px;font-size:14px}
+.head h1{font-size:26px;color:var(--ink);margin-bottom:6px}
+.head p{font-size:14px;color:var(--ink-soft)}
+.head .hint{margin-top:10px;font-size:12.5px;color:var(--brick-dk);background:rgba(193,80,58,.1);
+  display:inline-block;padding:5px 14px;border-radius:999px;border:1px solid rgba(193,80,58,.2)}
+
+/* phone frame */
+.phone{width:390px;max-width:100%;height:800px;background:var(--dark);border-radius:46px;
+  padding:13px;box-shadow:0 40px 80px -24px rgba(42,33,26,.5),0 0 0 2px var(--ink);position:relative}
+.phone::before{content:"";position:absolute;top:22px;left:50%;transform:translateX(-50%);
+  width:120px;height:26px;background:var(--dark);border-radius:0 0 16px 16px;z-index:20}
+.screen{width:100%;height:100%;border-radius:34px;background:var(--paper);overflow:hidden;
+  position:relative;display:flex;flex-direction:column}
+
+/* top status bar */
+.statusbar{height:40px;flex-shrink:0;display:flex;align-items:flex-end;justify-content:space-between;
+  padding:0 22px 4px;font-size:12px;font-weight:700;color:var(--ink)}
+
+/* screen body scroll */
+.body{flex:1;overflow-y:auto;overflow-x:hidden}
+.body::-webkit-scrollbar{width:0}
+.pad{padding:8px 20px 24px}
+
+/* views */
+.view{display:none;animation:fade .35s ease}
+.view.active{display:block}
+@keyframes fade{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+
+/* ---- LOGIN ---- */
+.login{height:100%;display:flex;flex-direction:column;justify-content:center;align-items:center;
+  text-align:center;padding:0 34px;background:
+    radial-gradient(120% 60% at 80% 0%,rgba(201,154,60,.28),transparent 55%),
+    linear-gradient(170deg,#f0dcc0,var(--paper))}
+.login .logo{width:78px;height:78px;border-radius:22px;background:var(--brick);display:grid;
+  place-items:center;font-size:40px;color:var(--cream);box-shadow:4px 4px 0 var(--ink);margin-bottom:22px}
+.login h2{font-size:27px;color:var(--ink);margin-bottom:8px}
+.login p{font-size:14.5px;color:var(--ink-soft);margin-bottom:34px;max-width:250px}
+.lbtn{width:100%;max-width:280px;padding:14px;border-radius:13px;font-weight:700;font-size:15px;
+  border:2px solid var(--ink);background:#fff;color:var(--ink);cursor:pointer;margin-bottom:13px;
+  display:flex;align-items:center;justify-content:center;gap:10px;box-shadow:3px 3px 0 var(--ink);
+  transition:transform .15s,box-shadow .15s}
+.lbtn:active{transform:translate(2px,2px);box-shadow:1px 1px 0 var(--ink)}
+.lbtn.g{background:#fff}
+.lbtn.mail{background:var(--forest);color:var(--cream);border-color:var(--ink)}
+.login small{margin-top:18px;font-size:11.5px;color:var(--ink-soft);max-width:230px}
+
+/* ---- generic ---- */
+.greet{padding:14px 4px 18px}
+.greet .hi{font-size:14px;color:var(--ink-soft)}
+.greet h2{font-size:24px;color:var(--ink)}
+.streak{display:flex;align-items:center;gap:8px;margin-top:10px;background:var(--brick);color:var(--cream);
+  padding:9px 15px;border-radius:14px;font-weight:700;font-size:14px;box-shadow:3px 3px 0 var(--ink);width:fit-content}
+
+.statgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:11px;margin-bottom:20px}
+.stat{background:var(--paper);border:1.5px solid var(--line);border-radius:15px;padding:14px 10px;text-align:center;
+  box-shadow:2px 2px 0 rgba(42,33,26,.06)}
+.stat .num{font-size:26px;color:var(--brick-dk);line-height:1}
+.stat small{display:block;font-size:11px;color:var(--ink-soft);margin-top:4px;font-weight:500}
+
+.cta-big{width:100%;padding:17px;border-radius:16px;background:var(--brick);color:var(--cream);
+  font-weight:700;font-size:16px;border:none;cursor:pointer;box-shadow:4px 4px 0 var(--ink);
+  display:flex;align-items:center;justify-content:center;gap:9px;margin-bottom:22px;position:relative;overflow:hidden;
+  transition:transform .15s,box-shadow .15s}
+.cta-big:active{transform:translate(2px,2px);box-shadow:1px 1px 0 var(--ink)}
+.cta-big::after{content:"";position:absolute;top:0;left:-120%;width:55%;height:100%;
+  background:linear-gradient(100deg,transparent,rgba(255,255,255,.45),transparent);transform:skewX(-18deg);animation:sh 3.4s infinite}
+@keyframes sh{0%{left:-120%}45%,100%{left:170%}}
+
+.sect-t{font-family:"Noto Serif TC";font-weight:700;font-size:17px;margin:6px 0 13px;color:var(--ink)}
+
+/* feature grid */
+.fgrid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.fcard{background:var(--paper);border:1.5px solid var(--line);border-radius:16px;padding:15px 14px;cursor:pointer;
+  box-shadow:2px 2px 0 rgba(42,33,26,.07);transition:transform .15s,box-shadow .15s}
+.fcard:active{transform:translate(2px,2px);box-shadow:0 0 0 rgba(0,0,0,0)}
+.fcard .fic{width:42px;height:42px;border-radius:12px;display:grid;place-items:center;font-size:22px;
+  margin-bottom:10px;box-shadow:2px 2px 0 rgba(42,33,26,.25)}
+.fcard h3{font-size:15px;margin-bottom:3px}
+.fcard p{font-size:11.5px;color:var(--ink-soft);line-height:1.4}
+
+/* practice chat */
+.pr-head{background:var(--brick);color:var(--cream);margin:-8px -20px 16px;padding:14px 20px 16px;
+  display:flex;align-items:center;gap:11px}
+.pr-head .bk{cursor:pointer;font-size:20px}
+.pr-head b{font-size:16px}
+.pr-head span{font-size:12px;opacity:.85;display:block;font-weight:400}
+.chat{display:flex;flex-direction:column;gap:11px;margin-bottom:16px}
+.msg{max-width:86%;padding:12px 14px;border-radius:16px;font-size:13.5px;line-height:1.55;box-shadow:1px 2px 5px rgba(0,0,0,.06)}
+.msg.bot{background:#fff;border-bottom-left-radius:5px;align-self:flex-start;border:1px solid var(--line)}
+.msg.me{background:var(--forest);color:var(--cream);border-bottom-right-radius:5px;align-self:flex-end}
+.answer-box{border:2px dashed var(--line);border-radius:15px;padding:13px;background:var(--paper);margin-bottom:12px}
+.answer-box textarea{width:100%;border:none;background:transparent;resize:none;font-family:inherit;font-size:13.5px;
+  color:var(--ink);outline:none;min-height:70px;line-height:1.6}
+.answer-box textarea::placeholder{color:#a89880}
+.mic-row{display:flex;gap:10px;align-items:center;margin-top:8px;border-top:1px solid var(--line);padding-top:10px}
+.mic{width:38px;height:38px;border-radius:50%;background:var(--mustard);display:grid;place-items:center;font-size:18px;cursor:pointer;box-shadow:2px 2px 0 var(--ink)}
+.mic-row small{font-size:11.5px;color:var(--ink-soft)}
+.submit-a{margin-left:auto;background:var(--brick);color:var(--cream);border:none;padding:10px 20px;
+  border-radius:11px;font-weight:700;font-size:14px;cursor:pointer;box-shadow:2px 2px 0 var(--ink)}
+
+/* score */
+.score-wrap{text-align:center;padding:14px 0 4px}
+.ring{width:150px;height:150px;margin:6px auto 16px;position:relative}
+.ring svg{transform:rotate(-90deg)}
+.ring .val{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.ring .val .num{font-size:44px;color:var(--brick-dk);line-height:1}
+.ring .val small{font-size:12px;color:var(--ink-soft)}
+.fb-card{background:var(--paper);border:1.5px solid var(--line);border-radius:15px;padding:15px 16px;margin-bottom:12px;text-align:left}
+.fb-card .fb-t{font-weight:700;font-size:13.5px;margin-bottom:6px;display:flex;align-items:center;gap:7px}
+.fb-card.good .fb-t{color:var(--forest)}
+.fb-card.warn .fb-t{color:var(--brick-dk)}
+.fb-card p{font-size:13px;color:var(--ink-soft);line-height:1.55}
+
+/* tool detail */
+.td-head{margin:-8px -20px 16px;padding:16px 20px;color:var(--cream);display:flex;align-items:center;gap:11px}
+.td-head .bk{cursor:pointer;font-size:20px}
+.td-head h2{font-size:19px}
+.upload{border:2px dashed var(--line);border-radius:16px;padding:26px 16px;text-align:center;background:var(--paper);margin-bottom:16px}
+.upload .u-ic{font-size:34px;margin-bottom:8px}
+.upload p{font-size:13px;color:var(--ink-soft)}
+.upload button{margin-top:12px;background:var(--forest);color:var(--cream);border:none;padding:10px 22px;border-radius:11px;font-weight:700;cursor:pointer;box-shadow:2px 2px 0 var(--ink)}
+.chip-row{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px}
+.chip{background:rgba(47,74,62,.1);color:var(--forest);font-size:12px;font-weight:600;padding:5px 12px;border-radius:999px}
+
+/* progress chart */
+.bars{display:flex;align-items:flex-end;gap:9px;height:150px;padding:16px;background:var(--paper);
+  border:1.5px solid var(--line);border-radius:16px;margin-bottom:16px}
+.bar{flex:1;background:linear-gradient(var(--brick),var(--orange));border-radius:6px 6px 0 0;position:relative;min-height:8px}
+.bar span{position:absolute;bottom:-20px;left:50%;transform:translateX(-50%);font-size:10px;color:var(--ink-soft)}
+.bar b{position:absolute;top:-17px;left:50%;transform:translateX(-50%);font-size:10px;font-weight:700;color:var(--brick-dk);font-family:"Fraunces";font-style:italic}
+
+/* bottom nav */
+.bnav{flex-shrink:0;height:66px;background:var(--paper);border-top:1.5px solid var(--line);
+  display:flex;align-items:center;justify-content:space-around;padding-bottom:6px}
+.bnav .item{display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer;color:var(--ink-soft);font-size:10.5px;font-weight:600;flex:1;transition:color .2s}
+.bnav .item .bi{font-size:20px;opacity:.55}
+.bnav .item.on{color:var(--brick)}
+.bnav .item.on .bi{opacity:1}
+.bnav.hidden{display:none}
+
+.list-card{background:var(--paper);border:1.5px solid var(--line);border-radius:15px;padding:14px 16px;margin-bottom:10px;display:flex;align-items:center;gap:13px;cursor:pointer;box-shadow:2px 2px 0 rgba(42,33,26,.05)}
+.list-card .li-ic{width:40px;height:40px;border-radius:11px;display:grid;place-items:center;font-size:20px;flex-shrink:0}
+.list-card h3{font-size:14.5px;margin-bottom:2px}
+.list-card p{font-size:11.5px;color:var(--ink-soft)}
+.list-card .arw{margin-left:auto;color:var(--ink-soft);font-size:18px}
+
+/* profile */
+.prof-top{text-align:center;padding:20px 0 16px}
+.prof-top .av{width:76px;height:76px;border-radius:22px;background:var(--mustard);display:grid;place-items:center;font-size:38px;margin:0 auto 10px;box-shadow:3px 3px 0 var(--ink)}
+.prof-top h2{font-size:20px}
+.prof-top small{color:var(--ink-soft);font-size:13px}
+.mbti-badge{display:inline-block;margin-top:8px;background:var(--forest);color:var(--cream);font-weight:700;padding:5px 16px;border-radius:999px;font-size:13px}
+
+.note{max-width:640px;margin-top:22px;background:rgba(251,246,234,.7);border:1px solid var(--line);border-radius:14px;padding:14px 18px;font-size:12.5px;color:var(--ink-soft);line-height:1.7}
+.note b{color:var(--brick-dk)}
+</style>
+</head>
+<body>
+
+<div class="head">
+  <span class="tag">STEP 1 · 互動原型 PROTOTYPE</span>
+  <h1>🎯 面試教練 App</h1>
+  <p>撳落面試 chat、評分、求職工具、底部導覽——全部撳得郁</p>
+  <div class="hint">👆 由登入開始，撳掣行成個 flow</div>
+</div>
+
+<div class="phone">
+  <div class="screen">
+    <div class="statusbar" id="statusbar" style="display:none"><span>9:41</span><span>●●● 🔋</span></div>
+    <div class="body">
+
+      <!-- LOGIN -->
+      <div class="view active" id="v-login">
+        <div class="login">
+          <div class="logo">🎯</div>
+          <h2>面試教練</h2>
+          <p>練到穩陣先去見工<br>你嘅隨身 AI 面試特訓</p>
+          <button class="lbtn g" onclick="go('home',0)">
+            <svg width="18" height="18" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.5 12.2c0-.7-.1-1.4-.2-2H12v3.8h5.9c-.3 1.4-1 2.5-2.2 3.3v2.8h3.6c2.1-1.9 3.2-4.8 3.2-7.9z"/><path fill="#34A853" d="M12 23c2.9 0 5.4-1 7.2-2.6l-3.6-2.8c-1 .7-2.2 1.1-3.6 1.1-2.8 0-5.1-1.9-6-4.4H2.3v2.9C4.1 20.6 7.8 23 12 23z"/><path fill="#FBBC05" d="M6 14.3c-.2-.7-.4-1.4-.4-2.3s.1-1.6.4-2.3V6.8H2.3C1.5 8.3 1 10.1 1 12s.5 3.7 1.3 5.2L6 14.3z"/><path fill="#EA4335" d="M12 5.4c1.6 0 3 .5 4.1 1.6l3.1-3.1C17.4 2.1 14.9 1 12 1 7.8 1 4.1 3.4 2.3 6.8L6 9.7c.9-2.5 3.2-4.3 6-4.3z"/></svg>
+            用 Google 繼續
+          </button>
+          <small>用 Google 一撳登入，進度會跨手機、電腦同步。首次登入會做一次 MBTI 檢測。</small>
+        </div>
+      </div>
+
+      <!-- HOME -->
+      <div class="view" id="v-home">
+        <div class="pad">
+          <div class="greet">
+            <span class="hi">下午好 👋</span>
+            <h2>Stephanie，練起佢！</h2>
+            <div class="streak">🔥 連續練習 7 日</div>
+          </div>
+          <div class="statgrid">
+            <div class="stat"><span class="num">42</span><small>已練題數</small></div>
+            <div class="stat"><span class="num">81</span><small>平均分</small></div>
+            <div class="stat"><span class="num">+9</span><small>本週進步</small></div>
+          </div>
+          <button class="cta-big" onclick="go('practice',1)">🎬 開始今日練習</button>
+          <div class="sect-t">求職工具箱</div>
+          <div class="fgrid">
+            <div class="fcard" onclick="openTool('cv')"><div class="fic" style="background:var(--brick)">📄</div><h3>CV Health</h3><p>AI 體檢你份 CV</p></div>
+            <div class="fcard" onclick="openTool('salary')"><div class="fic" style="background:var(--mustard)">💰</div><h3>薪酬情報</h3><p>市場人工範圍</p></div>
+            <div class="fcard" onclick="openTool('ats')"><div class="fic" style="background:var(--forest)">✅</div><h3>ATS 檢查</h3><p>過機器篩選</p></div>
+            <div class="fcard" onclick="openTool('nego')"><div class="fic" style="background:var(--orange)">🤝</div><h3>談判演練</h3><p>傾人工對白</p></div>
+            <div class="fcard" onclick="openTool('debrief')"><div class="fic" style="background:var(--brick-dk)">📝</div><h3>面試覆盤</h3><p>即刻執返好</p></div>
+            <div class="fcard" onclick="openTool('mbti')"><div class="fic" style="background:#6b7a4f">🧭</div><h3>MBTI</h3><p>個人化 coaching</p></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- PRACTICE -->
+      <div class="view" id="v-practice">
+        <div class="pad">
+          <div class="pr-head">
+            <span class="bk" onclick="go('home',0)">‹</span>
+            <div><b>行為面試 · 中級</b><span>題目 3 / 8 · PM 職位</span></div>
+          </div>
+          <div class="chat">
+            <div class="msg bot">📋 情境：你申請緊 Product Manager。面試官問「講一次你同工程團隊意見唔合，你點處理？」</div>
+            <div class="msg bot">💡 提示：用 STAR 結構，focus 喺你點協調同結果。</div>
+          </div>
+          <div class="answer-box">
+            <textarea placeholder="喺度打你嘅答案，或者撳咪高峰講出嚟…">當時我哋為咗 feature 優先次序有分歧，我約咗 1-on-1 了解對方 concern，再用數據…</textarea>
+            <div class="mic-row">
+              <div class="mic">🎤</div>
+              <small>撳住講 · AI 會轉文字</small>
+              <button class="submit-a" onclick="go('score',1)">提交評分</button>
+            </div>
+          </div>
+          <div class="msg bot" style="max-width:100%">⏱️ 建議 1-2 分鐘作答，貼近真實面試節奏。</div>
+        </div>
+      </div>
+
+      <!-- SCORE -->
+      <div class="view" id="v-score">
+        <div class="pad">
+          <div class="pr-head" style="background:var(--forest)">
+            <span class="bk" onclick="go('practice',1)">‹</span>
+            <div><b>評分結果</b><span>行為面試 · 第 3 題</span></div>
+          </div>
+          <div class="score-wrap">
+            <div class="ring">
+              <svg width="150" height="150"><circle cx="75" cy="75" r="66" fill="none" stroke="rgba(42,33,26,.1)" stroke-width="12"/><circle cx="75" cy="75" r="66" fill="none" stroke="#c1503a" stroke-width="12" stroke-linecap="round" stroke-dasharray="414" stroke-dashoffset="79"/></svg>
+              <div class="val"><span class="num">82</span><small>/ 100</small></div>
+            </div>
+          </div>
+          <div class="fb-card good"><div class="fb-t">✅ 做得好</div><p>STAR 結構清晰，有講到主動約 1-on-1，展現咗協調能力同同理心。</p></div>
+          <div class="fb-card warn"><div class="fb-t">⚠️ 可以再好</div><p>結果部分可以加多啲量化成果（例如「最後準時上線，提升 15% 使用率」），令說服力更強。</p></div>
+          <div class="fb-card good"><div class="fb-t">🎯 下次試下</div><p>結尾補一句學到咩，會令答案更完整、更有反思深度。</p></div>
+          <button class="cta-big" onclick="go('practice',1)" style="margin-top:6px">下一題 ▸</button>
+        </div>
+      </div>
+
+      <!-- TOOL DETAIL (CV example) -->
+      <div class="view" id="v-tool">
+        <div class="pad">
+          <div class="td-head" id="td-head" style="background:var(--brick)">
+            <span class="bk" onclick="go('home',0)">‹</span>
+            <h2 id="td-title">CV Health</h2>
+          </div>
+          <p id="td-desc" style="font-size:13.5px;color:var(--ink-soft);margin-bottom:16px">上載你份 CV，AI 會揪出弱位同 red flag，畀到可以即刻改嘅具體建議。</p>
+          <div class="upload">
+            <div class="u-ic">📄</div>
+            <p>拖檔案入嚟或撳掣揀 CV<br><small>支援 PDF / Word</small></p>
+            <button onclick="alert('原型示範：真 app 會上傳畀 AI 分析')">選擇檔案</button>
+          </div>
+          <div class="sect-t">AI 會幫你睇</div>
+          <div class="chip-row" id="td-chips">
+            <span class="chip">關鍵字對版</span><span class="chip">量化成果</span><span class="chip">格式清晰度</span><span class="chip">Red flag</span><span class="chip">改善建議</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- STATS -->
+      <div class="view" id="v-stats">
+        <div class="pad">
+          <div class="greet"><h2>進度追蹤</h2><span class="hi">你嘅成長曲線</span></div>
+          <div class="sect-t">近 7 次平均分</div>
+          <div class="bars">
+            <div class="bar" style="height:55%"><b>68</b><span>一</span></div>
+            <div class="bar" style="height:62%"><b>72</b><span>二</span></div>
+            <div class="bar" style="height:58%"><b>70</b><span>三</span></div>
+            <div class="bar" style="height:72%"><b>78</b><span>四</span></div>
+            <div class="bar" style="height:70%"><b>76</b><span>五</span></div>
+            <div class="bar" style="height:82%"><b>84</b><span>六</span></div>
+            <div class="bar" style="height:88%"><b>88</b><span>日</span></div>
+          </div>
+          <div class="statgrid" style="margin-top:26px">
+            <div class="stat"><span class="num">7</span><small>連勝日數</small></div>
+            <div class="stat"><span class="num">42</span><small>累積題數</small></div>
+            <div class="stat"><span class="num">6</span><small>已練題型</small></div>
+          </div>
+          <div class="sect-t">最弱題型（建議練）</div>
+          <div class="list-card" onclick="go('practice',1)"><div class="li-ic" style="background:rgba(193,80,58,.15)">😰</div><div><h3>壓力面試</h3><p>平均 68 分 · 練多啲</p></div><span class="arw">›</span></div>
+          <div class="list-card" onclick="go('practice',1)"><div class="li-ic" style="background:rgba(201,154,60,.2)">💬</div><div><h3>Case Study</h3><p>平均 74 分</p></div><span class="arw">›</span></div>
+        </div>
+      </div>
+
+      <!-- PROFILE -->
+      <div class="view" id="v-profile">
+        <div class="pad">
+          <div class="prof-top">
+            <div class="av">🦊</div>
+            <h2>Stephanie</h2>
+            <small>auzistephanie@gmail.com</small><br>
+            <span class="mbti-badge">ENFP · 個人化 coaching 已開</span>
+          </div>
+          <div class="list-card" onclick="openTool('mbti')"><div class="li-ic" style="background:rgba(107,122,79,.2)">🧭</div><div><h3>重做 MBTI 檢測</h3><p>20 題 · 更新你嘅 coaching 風格</p></div><span class="arw">›</span></div>
+          <div class="list-card" onclick="go('stats',2)"><div class="li-ic" style="background:rgba(193,80,58,.15)">📊</div><div><h3>我嘅進度</h3><p>成長曲線同連勝</p></div><span class="arw">›</span></div>
+          <div class="list-card" onclick="openTool('cv')"><div class="li-ic" style="background:rgba(47,74,62,.14)">📄</div><div><h3>我嘅 CV</h3><p>已上載 1 份 · 分數 85</p></div><span class="arw">›</span></div>
+          <div class="list-card" onclick="alert('原型示範：設定 / 訂閱 / 登出')"><div class="li-ic" style="background:rgba(42,33,26,.1)">⚙️</div><div><h3>設定</h3><p>通知 · 訂閱 · 登出</p></div><span class="arw">›</span></div>
+        </div>
+      </div>
+
+    </div><!-- /body -->
+
+    <!-- bottom nav -->
+    <div class="bnav hidden" id="bnav">
+      <div class="item on" data-i="0" onclick="go('home',0)"><span class="bi">🏠</span>首頁</div>
+      <div class="item" data-i="1" onclick="go('practice',1)"><span class="bi">🎬</span>練習</div>
+      <div class="item" data-i="2" onclick="go('stats',2)"><span class="bi">📊</span>進度</div>
+      <div class="item" data-i="3" onclick="go('profile',3)"><span class="bi">🦊</span>我</div>
+    </div>
+
+  </div><!-- /screen -->
+</div><!-- /phone -->
+
+<div class="note">
+  <b>呢個係互動原型（唔係真 app）</b>，用嚟確認 flow 同外觀。真 app 會：Supabase Google 登入 → 後端駁你現有 <b>interview_trainer.py</b> 嘅 AI（DeepSeek）→ 進度存 Supabase 跨裝置同步 → Vercel 部署，手機可「加到主畫面」當 app 用。<br>
+  睇完覺得方向啱，同我講「開工」我就落 Step 2（Supabase schema + API 規格）。想改邊個畫面 / 加減功能都可以即管講。
+</div>
+
+<script>
+var tools={
+  cv:{t:'CV Health',c:'var(--brick)',d:'上載你份 CV，AI 會揪出弱位同 red flag，畀到可以即刻改嘅具體建議。',chips:['關鍵字對版','量化成果','格式清晰度','Red flag','改善建議']},
+  salary:{t:'薪酬情報',c:'var(--mustard)',d:'輸入職位同年資，睇市場人工範圍，入場前心中有數。',chips:['市場中位數','範圍區間','同職級比較','議價空間']},
+  ats:{t:'ATS 檢查',c:'var(--forest)',d:'模擬招聘系統點 scan 你份 CV，確保過到機器篩選。',chips:['關鍵字命中','格式相容','檔案結構','通過率預估']},
+  nego:{t:'談判演練',c:'var(--orange)',d:'拎到 offer 之後點傾人工？AI 幫你 rehearse 談判對白同 counter 策略。',chips:['開價策略','Counter 對白','福利談判','時機建議']},
+  debrief:{t:'面試覆盤',c:'var(--brick-dk)',d:'面試完即刻覆盤：邊題答得好、邊題可以點執，下次更穩。',chips:['逐題檢討','改善方向','跟進行動','情緒紀錄']},
+  mbti:{t:'MBTI 檢測',c:'#6b7a4f',d:'20 題快速檢測，教練會照你性格強弱項調整提示同鼓勵方式。',chips:['20 題','16 型','個人化提示','強弱項分析']}
+};
+function setNav(i){
+  document.querySelectorAll('#bnav .item').forEach(function(el){el.classList.toggle('on',+el.dataset.i===i);});
+}
+function go(view,navIdx){
+  document.querySelectorAll('.view').forEach(function(v){v.classList.remove('active');});
+  document.getElementById('v-'+view).classList.add('active');
+  var bnav=document.getElementById('bnav'), sb=document.getElementById('statusbar');
+  if(view==='login'){bnav.classList.add('hidden');sb.style.display='none';}
+  else{bnav.classList.remove('hidden');sb.style.display='flex';}
+  if(typeof navIdx==='number') setNav(navIdx);
+  document.querySelector('.body').scrollTop=0;
+}
+function openTool(key){
+  var t=tools[key];
+  document.getElementById('td-title').textContent=t.t;
+  document.getElementById('td-desc').textContent=t.d;
+  document.getElementById('td-head').style.background=t.c;
+  document.getElementById('td-chips').innerHTML=t.chips.map(function(c){return '<span class="chip">'+c+'</span>';}).join('');
+  go('tool',null);
+}
+</script>
+</body>
+</html>

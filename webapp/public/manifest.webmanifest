@@ -1,0 +1,13 @@
+{
+  "name": "面試教練",
+  "short_name": "面試教練",
+  "description": "AI 面試特訓 · 練到穩陣先去見工",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f6efe0",
+  "theme_color": "#c1503a",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}
