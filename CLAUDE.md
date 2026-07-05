@@ -30,7 +30,9 @@ AI 生成面試場景，評估回答，追蹤進度，MBTI 個人化 coaching。
 - 由 Telegram bot → 真 app，**加建唔取代**，bot + Redis 照舊運作。
 - 前端 `webapp/src/`（Vite React），API `webapp/api/index.py`（Flask，包 `interview_trainer.py`，copy 入 `api/_lib/` + shim `utils.py` 去走 Redis/Telegram）。
 - **登入**：Supabase Auth（Google only）。**資料**：Supabase Postgres，共用 project `cmtubaxlniglklmdwlzs`，所有 table `coach_` 前綴 + RLS（`user_id = auth.uid()`）。**AI**：DeepSeek 不變。
-- 部署：Vercel **新 project**，Root Directory = `webapp`，env 要 `DEEPSEEK_API_KEY`。schema/API 對照見 `docs/APP_SPEC.md`。
+- 部署：Vercel **新 project** `interview-coach`（git auto-deploy），Root Directory = `webapp`，env 要 `DEEPSEEK_API_KEY`。**生產網址 https://interview-coach-ten-delta.vercel.app**。schema/API 對照見 `docs/APP_SPEC.md`。
+- **首次登入 onboarding**：`coach_profiles.onboarded=false` 觸發 → 可跳過 MBTI（真 20 題）→ 可跳過 upload CV → 設 `onboarded=true`。gate 喺 `App.jsx`，畫面喺 `screens.jsx`（`Onboarding`/`MbtiQuiz`/`CvStep`）。MBTI endpoint 用 `api/_lib/mbti_checker.py`。
+- PWA：`webapp/public/` 有 `icon-192/512.png` + `sw.js`（真可安裝）。
 
 ## Bot 指令
 

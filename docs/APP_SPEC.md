@@ -38,6 +38,7 @@
 | mbti | text | 例 `ENFP`；null = 未做 |
 | mbti_scores | jsonb | 四維得分 |
 | coaching_on | bool | 是否啟用 MBTI coaching |
+| onboarded | bool | 首次登入 onboarding 完成／跳過（gate 用，default false）|
 | created_at | timestamptz | |
 
 ### `practice_sessions`
