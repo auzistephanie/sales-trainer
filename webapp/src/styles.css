@@ -131,3 +131,27 @@ textarea.field{min-height:120px;resize:vertical;line-height:1.6}
 .bnav .item.on .bi{opacity:1}
 
 .err{background:rgba(193,80,58,.1);color:var(--brick-dk);border:1px solid rgba(193,80,58,.3);border-radius:10px;padding:10px 14px;font-size:12.5px;margin-bottom:12px}
+
+/* ── Onboarding / MBTI quiz ── */
+.ob-screen{display:flex;flex-direction:column;align-items:center;text-align:center;padding:34px 22px 24px;gap:14px;animation:fade .3s ease}
+.ob-ic{width:72px;height:72px;border-radius:20px;display:grid;place-items:center;font-size:32px;color:var(--cream);box-shadow:4px 4px 0 var(--ink)}
+.ob-title{font-size:22px;color:var(--ink);margin:2px 0}
+.ob-sub{font-size:13.5px;color:var(--ink-soft);line-height:1.7;max-width:250px;margin:0 0 4px}
+.ob-screen .cta-big{margin-top:6px}
+.ob-screen .field{text-align:left}
+.ob-skip{background:none;border:none;color:var(--ink-soft);font-size:12.5px;text-decoration:underline;cursor:pointer;margin-top:4px}
+.ob-tag{font-size:12px;color:var(--ink-soft);letter-spacing:2px}
+.mbti-big{font-family:"Noto Serif TC",serif;font-size:46px;font-weight:900;color:var(--brick);letter-spacing:3px;line-height:1}
+.ob-desc{font-size:14px;font-weight:700;color:var(--ink)}
+.coach-on{background:rgba(47,74,62,.14);color:var(--forest);font-size:12px;padding:6px 14px;border-radius:20px}
+.ob-prog{display:flex;align-items:center;gap:10px;margin-bottom:6px}
+.bk-sm{background:none;border:none;font-size:22px;color:var(--ink);cursor:pointer;line-height:1;padding:0}
+.pbar{flex:1;height:7px;background:var(--line);border-radius:4px;overflow:hidden}
+.pbar>div{height:100%;background:var(--forest)}
+.pnum{font-size:12px;color:var(--ink-soft)}
+.q-no{font-size:12px;color:var(--ink-soft);margin:14px 0 6px}
+.q-text{font-size:17px;font-weight:700;color:var(--ink);line-height:1.6;margin-bottom:20px}
+.opt{width:100%;text-align:left;padding:15px;margin-bottom:12px;border:1.5px solid var(--line);border-radius:14px;background:var(--paper);font-size:14px;line-height:1.5;color:var(--ink);cursor:pointer;transition:transform .1s}
+.opt:active{transform:scale(.99)}
+.opt b{margin-right:2px}
+.opt:disabled{opacity:.5}

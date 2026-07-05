@@ -28,5 +28,6 @@ export const api = {
   negotiate: (opts) => authFetch('/api/app/negotiate', opts),
   debrief: (opts) => authFetch('/api/app/debrief', opts),
   tip: () => authFetch('/api/app/tip', {}),
+  mbtiQuestions: () => authFetch('/api/app/mbti/questions', {}),
   mbtiSubmit: (opts) => authFetch('/api/app/mbti/submit', opts)
 }

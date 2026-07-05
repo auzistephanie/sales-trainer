@@ -205,10 +205,18 @@ export function ToolDetail({ toolKey, profile, onBack }) {
       <p style={{ fontSize: 13.5, color: 'var(--ink-soft)', marginBottom: 16 }}>{cfg.d}</p>
 
       {cfg.mbti ? (
-        <div className="upload">
-          <div className="u-ic">🧭</div>
-          <p>MBTI 20 題檢測<br /><small>完整版稍後推出，會照你性格調整 coaching</small></p>
-        </div>
+        <MbtiQuiz
+          showSkip={false}
+          onSkip={onBack}
+          onDone={async (r) => {
+            try {
+              await supabase.from('coach_profiles').update({
+                mbti: r.mbti, mbti_scores: r.dimensions, coaching_on: true
+              }).eq('id', profile.id)
+            } catch (e) { /* ignore */ }
+            onBack()
+          }}
+        />
       ) : (
         <>
           {cfg.fields.map(([k, type, ph]) =>
@@ -273,6 +281,133 @@ export function Profile({ profile, session, onTool, onStats }) {
       <button className="list-card" onClick={onStats}><div className="li-ic" style={{ background: 'rgba(193,80,58,.15)' }}>📊</div><div><h3>我嘅進度</h3><p>成長曲線同連勝</p></div><span className="arw">›</span></button>
       <button className="list-card" onClick={() => onTool('cv')}><div className="li-ic" style={{ background: 'rgba(47,74,62,.14)' }}>📄</div><div><h3>CV Health</h3><p>體檢你份 CV</p></div><span className="arw">›</span></button>
       <button className="list-card" onClick={logout}><div className="li-ic" style={{ background: 'rgba(42,33,26,.1)' }}>🚪</div><div><h3>登出</h3><p>{session?.user?.email}</p></div><span className="arw">›</span></button>
+    </div>
+  )
+}
+
+/* ---------------- MBTI QUIZ ---------------- */
+export function MbtiQuiz({ onDone, onSkip, showSkip = true }) {
+  const [qs, setQs] = useState(null)
+  const [step, setStep] = useState(-1)   // -1 intro · -2 result
+  const [ans, setAns] = useState([])
+  const [result, setResult] = useState(null)
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+
+  useEffect(() => {
+    api.mbtiQuestions().then(r => setQs(r.questions))
+      .catch(e => setErr('載入題目失敗：' + e.message))
+  }, [])
+
+  async function choose(letter) {
+    const next = [...ans, letter]
+    if (next.length >= (qs?.length || 20)) {
+      setBusy(true); setErr('')
+      try {
+        const r = await api.mbtiSubmit({ answers: next })
+        setResult(r); setStep(-2)
+      } catch (e) { setErr('計算失敗：' + e.message); setBusy(false); return }
+      setBusy(false)
+    } else {
+      setAns(next); setStep(next.length)
+    }
+  }
+
+  if (step === -1) return (
+    <div className="ob-screen">
+      <div className="ob-ic" style={{ background: 'var(--brick)' }}>🧭</div>
+      <h2 className="ob-title">想先做個 MBTI 嗎？</h2>
+      <p className="ob-sub">20 條快速題目，教練會照你性格調整之後嘅 coaching。</p>
+      {err && <div className="err">{err}</div>}
+      <button className="cta-big" disabled={!qs} onClick={() => setStep(0)}>
+        {qs ? '做 MBTI（約 2 分鐘）' : '載入緊…'}
+      </button>
+      {showSkip && <button className="ob-skip" onClick={onSkip}>跳過，自己入 ›</button>}
+    </div>
+  )
+
+  if (step === -2 && result) return (
+    <div className="ob-screen">
+      <div className="ob-tag">你嘅類型</div>
+      <div className="mbti-big">{result.mbti}</div>
+      <div className="ob-desc">{result.desc}</div>
+      <div className="coach-on">✓ coaching 已按你性格開啟</div>
+      <button className="cta-big" onClick={() => onDone(result)}>下一步 ▸</button>
+    </div>
+  )
+
+  const q = qs[step]
+  const pct = Math.round(((step + 1) / qs.length) * 100)
+  return (
+    <div className="view pad">
+      <div className="ob-prog">
+        {step > 0
+          ? <button className="bk-sm" onClick={() => { setAns(ans.slice(0, -1)); setStep(step - 1) }}>‹</button>
+          : <span style={{ width: 16 }} />}
+        <div className="pbar"><div style={{ width: pct + '%' }} /></div>
+        <span className="pnum">{step + 1}/{qs.length}</span>
+      </div>
+      <div className="q-no">第 {step + 1} 題</div>
+      <div className="q-text">{q.question}</div>
+      <button className="opt" disabled={busy} onClick={() => choose('A')}><b style={{ color: 'var(--brick)' }}>A</b>　{q.a}</button>
+      <button className="opt" disabled={busy} onClick={() => choose('B')}><b style={{ color: 'var(--forest)' }}>B</b>　{q.b}</button>
+      {err && <div className="err">{err}</div>}
+      {showSkip && <button className="ob-skip" onClick={onSkip}>Skip MBTI</button>}
+    </div>
+  )
+}
+
+/* ---------------- CV STEP ---------------- */
+function CvStep({ profile, onDone }) {
+  const [text, setText] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+  async function upload() {
+    if (!text.trim()) return onDone()
+    setBusy(true); setErr('')
+    try {
+      const r = await api.cvHealth({ cv_text: text })
+      await supabase.from('coach_cvs').insert({
+        user_id: profile.id, cv_text: text, health_score: r.score ?? null
+      })
+    } catch (e) { setErr('體檢失敗：' + e.message); setBusy(false); return }
+    setBusy(false); onDone()
+  }
+  return (
+    <div className="ob-screen">
+      <div className="ob-ic" style={{ background: 'var(--forest)' }}>📄</div>
+      <h2 className="ob-title">upload 你份 CV</h2>
+      <p className="ob-sub">AI 即刻幫你體檢、揪弱位，之後 ATS 檢查同 tailored CV 都用得着。</p>
+      <textarea className="field" style={{ minHeight: 130 }} placeholder="貼上你 CV 全文…" value={text} onChange={e => setText(e.target.value)} />
+      {err && <div className="err">{err}</div>}
+      <button className="cta-big" disabled={busy} onClick={upload}>{busy ? 'AI 體檢緊…' : '上載並體檢'}</button>
+      <button className="ob-skip" onClick={onDone}>遲啲先，直接入 ›</button>
+    </div>
+  )
+}
+
+/* ---------------- ONBOARDING ---------------- */
+export function Onboarding({ profile, onFinish }) {
+  const [phase, setPhase] = useState('mbti')   // mbti | cv
+
+  async function saveMbti(result) {
+    try {
+      await supabase.from('coach_profiles').update({
+        mbti: result.mbti, mbti_scores: result.dimensions, coaching_on: true
+      }).eq('id', profile.id)
+    } catch (e) { /* 唔阻流程 */ }
+    setPhase('cv')
+  }
+  async function finish() {
+    try { await supabase.from('coach_profiles').update({ onboarded: true }).eq('id', profile.id) } catch (e) {}
+    onFinish()
+  }
+
+  return (
+    <div className="view">
+      {phase === 'mbti'
+        ? <MbtiQuiz onDone={saveMbti} onSkip={() => setPhase('cv')} />
+        : <CvStep profile={profile} onDone={finish} />}
     </div>
   )
 }

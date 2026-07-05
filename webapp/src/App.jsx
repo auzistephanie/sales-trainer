@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase, signInWithGoogle } from './supabase.js'
-import { Login, Home, Practice, Score, ToolDetail, Stats, Profile, BottomNav } from './screens.jsx'
+import { Login, Home, Practice, Score, ToolDetail, Stats, Profile, BottomNav, Onboarding } from './screens.jsx'
 
 // 首次登入確保有 profile + stats row（app 層做，唔用 auth trigger，免同其他 app 撞）
 async function ensureUserRows(user) {
@@ -40,6 +40,7 @@ export default function App() {
       const { data: p } = await supabase.from('coach_profiles').select('*').eq('id', session.user.id).single()
       const { data: st } = await supabase.from('coach_stats').select('*').eq('user_id', session.user.id).single()
       setProfile(p); setStats(st)
+      if (p && !p.onboarded) setScreen('onboarding')
     })()
   }, [session])
 
@@ -49,11 +50,28 @@ export default function App() {
     setStats(st)
   }
 
+  async function reloadProfile() {
+    if (!session?.user) return
+    const { data: p } = await supabase.from('coach_profiles').select('*').eq('id', session.user.id).single()
+    setProfile(p)
+  }
+
   if (loading) return <div className="app"><div className="spin" /></div>
   if (!session) return <div className="app"><Login onLogin={signInWithGoogle} /></div>
 
   const nav = (s) => { setScreen(s) }
   const openTool = (k) => { setToolKey(k); setScreen('tool') }
+
+  if (screen === 'onboarding' && profile) {
+    return (
+      <div className="app">
+        <div className="app-body">
+          <Onboarding profile={profile}
+            onFinish={async () => { await reloadProfile(); setScreen('home') }} />
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="app">

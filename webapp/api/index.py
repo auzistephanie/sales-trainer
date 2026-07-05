@@ -19,6 +19,7 @@ from interview_trainer import (
     generate_negotiate_response, extract_negotiate_reply,
     generate_debrief,
 )
+from mbti_checker import MBTI_QUESTIONS, calculate_mbti, MBTI_QUICK_DESC
 
 app = Flask(__name__)
 
@@ -156,6 +157,31 @@ def tip():
     _, err = require_user()
     if err: return err
     return jsonify({"result": get_daily_tip()})
+
+
+# ── MBTI ──────────────────────────────────────────────────────
+@app.route("/api/app/mbti/questions", methods=["POST", "GET"])
+def mbti_questions():
+    _, err = require_user()
+    if err: return err
+    qs = [
+        {"id": q["id"], "dimension": q["dimension"],
+         "question": q["question"], "a": q["a"], "b": q["b"]}
+        for q in MBTI_QUESTIONS
+    ]
+    return jsonify({"questions": qs})
+
+
+@app.route("/api/app/mbti/submit", methods=["POST"])
+def mbti_submit():
+    _, err = require_user()
+    if err: return err
+    answers = body().get("answers") or []
+    res = calculate_mbti(answers)
+    if not res:
+        return jsonify({"error": "需要 20 個 A/B 答案"}), 400
+    res["desc"] = MBTI_QUICK_DESC.get(res["mbti"], "")
+    return jsonify(res)
 
 
 @app.route("/api/app/health", methods=["GET"])
