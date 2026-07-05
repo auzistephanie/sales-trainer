@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { supabase, signInWithGoogle } from './supabase.js'
 import { Login, Home, Practice, Score, ToolDetail, Stats, Profile, BottomNav, Onboarding } from './screens.jsx'
+import { HzDefs, DiamondBand } from './huazhuan.jsx'
+import { themeVars } from './theme.js'
 
 // 首次登入確保有 profile + stats row（app 層做，唔用 auth trigger，免同其他 app 撞）
 async function ensureUserRows(user) {
@@ -56,15 +58,18 @@ export default function App() {
     setProfile(p)
   }
 
-  if (loading) return <div className="app"><div className="spin" /></div>
-  if (!session) return <div className="app"><Login onLogin={signInWithGoogle} /></div>
+  const themeStyle = themeVars(profile)
+
+  if (loading) return <div className="app" style={themeStyle}><div className="spin" /></div>
+  if (!session) return <div className="app" style={themeStyle}><HzDefs /><Login onLogin={signInWithGoogle} /></div>
 
   const nav = (s) => { setScreen(s) }
   const openTool = (k) => { setToolKey(k); setScreen('tool') }
 
   if (screen === 'onboarding' && profile) {
     return (
-      <div className="app">
+      <div className="app" style={themeStyle}>
+        <HzDefs />
         <div className="app-body">
           <Onboarding profile={profile}
             onFinish={async () => { await reloadProfile(); setScreen('home') }} />
@@ -74,7 +79,8 @@ export default function App() {
   }
 
   return (
-    <div className="app">
+    <div className="app" style={themeStyle}>
+      <HzDefs />
       <div className="app-body">
         {screen === 'home' && (
           <Home profile={profile} stats={stats}
@@ -94,7 +100,8 @@ export default function App() {
         )}
         {screen === 'stats' && <Stats stats={stats} onPractice={() => nav('practice')} />}
         {screen === 'profile' && (
-          <Profile profile={profile} session={session} onTool={openTool} onStats={() => nav('stats')} />
+          <Profile profile={profile} session={session} onTool={openTool} onStats={() => nav('stats')}
+            onThemeSaved={reloadProfile} />
         )}
       </div>
       <BottomNav screen={screen} onNav={nav} />

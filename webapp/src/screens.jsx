@@ -1,21 +1,26 @@
 import { useState, useEffect } from 'react'
 import { supabase } from './supabase.js'
 import { api } from './api.js'
+import { StarBg, DiamondBand } from './huazhuan.jsx'
+import { THEMES } from './theme.js'
 
 const todayStr = () => new Date().toISOString().slice(0, 10)
 
 /* ---------------- LOGIN ---------------- */
 export function Login({ onLogin }) {
   return (
-    <div className="center-screen login view">
-      <div className="logo">🎯</div>
-      <h2>面試教練</h2>
-      <p>練到穩陣先去見工<br />你嘅隨身 AI 面試特訓</p>
-      <button className="lbtn" onClick={onLogin}>
-        <svg width="18" height="18" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.5 12.2c0-.7-.1-1.4-.2-2H12v3.8h5.9c-.3 1.4-1 2.5-2.2 3.3v2.8h3.6c2.1-1.9 3.2-4.8 3.2-7.9z"/><path fill="#34A853" d="M12 23c2.9 0 5.4-1 7.2-2.6l-3.6-2.8c-1 .7-2.2 1.1-3.6 1.1-2.8 0-5.1-1.9-6-4.4H2.3v2.9C4.1 20.6 7.8 23 12 23z"/><path fill="#FBBC05" d="M6 14.3c-.2-.7-.4-1.4-.4-2.3s.1-1.6.4-2.3V6.8H2.3C1.5 8.3 1 10.1 1 12s.5 3.7 1.3 5.2L6 14.3z"/><path fill="#EA4335" d="M12 5.4c1.6 0 3 .5 4.1 1.6l3.1-3.1C17.4 2.1 14.9 1 12 1 7.8 1 4.1 3.4 2.3 6.8L6 9.7c.9-2.5 3.2-4.3 6-4.3z"/></svg>
-        用 Google 繼續
-      </button>
-      <small>用 Google 一撳登入，進度會跨手機、電腦同步。首次登入會做一次 MBTI 檢測。</small>
+    <div className="login-a">
+      <StarBg />
+      <div className="login-card">
+        <div className="logo">🎯</div>
+        <h2>面試教練</h2>
+        <p>練到穩陣先去見工<br />你嘅隨身 AI 面試特訓</p>
+        <button className="lbtn" onClick={onLogin}>
+          <svg width="18" height="18" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.5 12.2c0-.7-.1-1.4-.2-2H12v3.8h5.9c-.3 1.4-1 2.5-2.2 3.3v2.8h3.6c2.1-1.9 3.2-4.8 3.2-7.9z"/><path fill="#34A853" d="M12 23c2.9 0 5.4-1 7.2-2.6l-3.6-2.8c-1 .7-2.2 1.1-3.6 1.1-2.8 0-5.1-1.9-6-4.4H2.3v2.9C4.1 20.6 7.8 23 12 23z"/><path fill="#FBBC05" d="M6 14.3c-.2-.7-.4-1.4-.4-2.3s.1-1.6.4-2.3V6.8H2.3C1.5 8.3 1 10.1 1 12s.5 3.7 1.3 5.2L6 14.3z"/><path fill="#EA4335" d="M12 5.4c1.6 0 3 .5 4.1 1.6l3.1-3.1C17.4 2.1 14.9 1 12 1 7.8 1 4.1 3.4 2.3 6.8L6 9.7c.9-2.5 3.2-4.3 6-4.3z"/></svg>
+          用 Google 繼續
+        </button>
+        <small>用 Google 一撳登入，進度會跨手機、電腦同步。首次登入可做 MBTI（隨時可跳過）。</small>
+      </div>
     </div>
   )
 }
@@ -40,12 +45,14 @@ export function Home({ profile, stats, onStart, onTool }) {
   }
 
   return (
-    <div className="view pad">
-      <div className="greet">
+    <div className="view">
+      <div className="c-head">
         <span className="hi">今日想練邊方面？👋</span>
         <h2>{name}，練起佢！</h2>
         <div className="streak">🔥 連續練習 {stats?.streak_days ?? 0} 日</div>
       </div>
+      <DiamondBand height={18} />
+      <div className="pad">
       <div className="statgrid">
         <div className="stat"><span className="num">{stats?.total_answered ?? 0}</span><small>已練題數</small></div>
         <div className="stat"><span className="num">{stats?.avg_score ? Math.round(stats.avg_score) : 0}</span><small>平均分</small></div>
@@ -70,6 +77,7 @@ export function Home({ profile, stats, onStart, onTool }) {
             <h3>{t}</h3><p>{d}</p>
           </button>
         ))}
+      </div>
       </div>
     </div>
   )
@@ -104,6 +112,7 @@ export function Practice({ scenario, profile, onBack, onScored }) {
         <button className="bk" onClick={onBack}>‹</button>
         <div><b>{scenario.qtype || '面試練習'}</b><span>{scenario.difficulty || '中級'} · {scenario.industry || ''}</span></div>
       </div>
+      <DiamondBand height={16} />
       <div className="chat">
         <div className="msg bot">📋 {scenario.question}</div>
         {scenario.hint && <div className="msg bot">💡 提示：{scenario.hint}</div>}
@@ -148,6 +157,7 @@ export function Score({ result, onNext, onHome }) {
         <button className="bk" onClick={onHome}>‹</button>
         <div><b>評分結果</b><span>AI 已評估你嘅答案</span></div>
       </div>
+      <DiamondBand height={16} />
       <div className="ring">
         <svg width="150" height="150">
           <circle cx="75" cy="75" r="66" fill="none" stroke="rgba(42,33,26,.1)" strokeWidth="12" />
@@ -202,6 +212,7 @@ export function ToolDetail({ toolKey, profile, onBack }) {
         <button className="bk" onClick={onBack}>‹</button>
         <h2>{cfg.t}</h2>
       </div>
+      <DiamondBand height={16} />
       <p style={{ fontSize: 13.5, color: 'var(--ink-soft)', marginBottom: 16 }}>{cfg.d}</p>
 
       {cfg.mbti ? (
@@ -267,7 +278,34 @@ export function Stats({ stats, onPractice }) {
 }
 
 /* ---------------- PROFILE ---------------- */
-export function Profile({ profile, session, onTool, onStats }) {
+function ThemePicker({ profile, onSaved }) {
+  const [busy, setBusy] = useState(false)
+  const [custom, setCustom] = useState(profile?.custom_accent_color || '#c1503a')
+  const activeKey = profile?.custom_accent_color ? null : (profile?.theme || 'brick')
+  async function save(patch) {
+    setBusy(true)
+    try { await supabase.from('coach_profiles').update(patch).eq('id', profile.id); await onSaved?.() } catch (e) {}
+    setBusy(false)
+  }
+  return (
+    <div className="theme-box">
+      <div className="theme-t">主題配色</div>
+      <div className="theme-row">
+        {Object.entries(THEMES).map(([k, t]) => (
+          <button key={k} className={'sw' + (activeKey === k ? ' on' : '')} style={{ background: t.accent }}
+            disabled={busy} onClick={() => save({ theme: k, custom_accent_color: null })} aria-label={t.label} />
+        ))}
+      </div>
+      <div className="theme-custom">
+        <span className="cus-label">自選 accent</span>
+        <input type="color" value={custom} onChange={e => setCustom(e.target.value)} />
+        <button className="cus-apply" disabled={busy} onClick={() => save({ custom_accent_color: custom })}>套用</button>
+      </div>
+    </div>
+  )
+}
+
+export function Profile({ profile, session, onTool, onStats, onThemeSaved }) {
   async function logout() { await supabase.auth.signOut() }
   return (
     <div className="view pad">
@@ -277,6 +315,7 @@ export function Profile({ profile, session, onTool, onStats }) {
         <small>{session?.user?.email}</small><br />
         <span className="mbti-badge">{profile?.mbti ? `${profile.mbti} · coaching 已開` : 'MBTI 未做'}</span>
       </div>
+      <ThemePicker profile={profile} onSaved={onThemeSaved} />
       <button className="list-card" onClick={() => onTool('mbti')}><div className="li-ic" style={{ background: 'rgba(107,122,79,.2)' }}>🧭</div><div><h3>MBTI 檢測</h3><p>更新你嘅 coaching 風格</p></div><span className="arw">›</span></button>
       <button className="list-card" onClick={onStats}><div className="li-ic" style={{ background: 'rgba(193,80,58,.15)' }}>📊</div><div><h3>我嘅進度</h3><p>成長曲線同連勝</p></div><span className="arw">›</span></button>
       <button className="list-card" onClick={() => onTool('cv')}><div className="li-ic" style={{ background: 'rgba(47,74,62,.14)' }}>📄</div><div><h3>CV Health</h3><p>體檢你份 CV</p></div><span className="arw">›</span></button>

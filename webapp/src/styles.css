@@ -155,3 +155,29 @@ textarea.field{min-height:120px;resize:vertical;line-height:1.6}
 .opt:active{transform:scale(.99)}
 .opt b{margin-right:2px}
 .opt:disabled{opacity:.5}
+
+/* ── 花磚 / 主題 ── */
+.hz-band{display:block}
+.login-a{position:relative;min-height:100dvh;display:flex;align-items:center;justify-content:center;padding:26px;overflow:hidden;background:var(--cream)}
+.hz-starbg{position:absolute;inset:0;width:100%;height:100%}
+.login-card{position:relative;z-index:1;background:var(--paper);border-radius:20px;border:3px solid var(--ink);box-shadow:6px 6px 0 var(--ink);padding:34px 26px;max-width:312px;width:100%;display:flex;flex-direction:column;align-items:center;text-align:center}
+.login-card h2{font-size:26px;color:var(--ink);margin:16px 0 8px}
+.login-card p{font-size:14px;color:var(--ink-soft);margin-bottom:24px;line-height:1.6}
+.login-card small{margin-top:16px;font-size:11.5px;color:var(--ink-soft);line-height:1.6;max-width:250px}
+
+/* 內頁 C：色塊 header */
+.c-head{background:var(--brick);color:var(--cream);padding:20px 20px 22px}
+.c-head .hi{font-size:14px;color:rgba(255,255,255,.82)}
+.c-head h2{font-size:24px;color:var(--cream);margin-top:2px}
+.c-head .streak{background:rgba(255,255,255,.2);color:#fff;box-shadow:none;margin-top:12px}
+
+/* 主題 picker */
+.theme-box{background:var(--paper);border:2px solid var(--ink);border-radius:16px;padding:14px 16px;margin-bottom:14px;box-shadow:3px 3px 0 var(--ink)}
+.theme-t{font-size:13px;font-weight:700;color:var(--ink);margin-bottom:10px}
+.theme-row{display:flex;gap:12px;margin-bottom:12px}
+.sw{width:34px;height:34px;border-radius:50%;border:2px solid rgba(42,33,26,.2);cursor:pointer;padding:0;transition:transform .1s}
+.sw.on{border:3px solid var(--ink);transform:scale(1.08)}
+.theme-custom{display:flex;align-items:center;gap:10px}
+.cus-label{font-size:12.5px;color:var(--ink-soft)}
+.theme-custom input[type=color]{width:34px;height:30px;border:none;background:none;padding:0;cursor:pointer}
+.cus-apply{margin-left:auto;background:var(--brick);color:var(--cream);border:none;border-radius:10px;padding:7px 16px;font-size:12.5px;font-weight:700}
