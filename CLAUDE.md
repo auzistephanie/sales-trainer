@@ -33,6 +33,7 @@ AI 生成面試場景，評估回答，追蹤進度，MBTI 個人化 coaching。
 - 部署：Vercel **新 project** `interview-coach`（git auto-deploy），Root Directory = `webapp`，env 要 `DEEPSEEK_API_KEY`。**生產網址 https://interview-coach-ten-delta.vercel.app**。schema/API 對照見 `docs/APP_SPEC.md`。
 - **首次登入 onboarding**：`coach_profiles.onboarded=false` 觸發 → 可跳過 MBTI（真 20 題）→ 可跳過 upload CV → 設 `onboarded=true`。gate 喺 `App.jsx`，畫面喺 `screens.jsx`（`Onboarding`/`MbtiQuiz`/`CvStep`）。MBTI endpoint 用 `api/_lib/mbti_checker.py`。
 - PWA：`webapp/public/` 有 `icon-192/512.png` + `sw.js`（真可安裝）。
+- **花磚視覺 + 主題**：Login 用滿版八角星花磚 + 浮紙卡（`screens.jsx` `Login` + `huazhuan.jsx` `StarBg`）；內頁用色塊 header + 菱格花磚帶（`c-head` + `DiamondBand`）。主題引擎 `theme.js`（4 preset `brick/forest/indigo/ochre` + 自選 accent），套色寫 CSS 變數落 `.app` root（`themeVars`），設定喺 Profile `ThemePicker`，存 `coach_profiles.theme` + `custom_accent_color`（照 travel app 套法）。
 
 ## Bot 指令
 

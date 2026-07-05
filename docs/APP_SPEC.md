@@ -39,6 +39,8 @@
 | mbti_scores | jsonb | 四維得分 |
 | coaching_on | bool | 是否啟用 MBTI coaching |
 | onboarded | bool | 首次登入 onboarding 完成／跳過（gate 用，default false）|
+| theme | text | 主題 preset：`brick`(default)/`forest`/`indigo`/`ochre` |
+| custom_accent_color | text | 自選 accent hex（有值時覆蓋 preset accent）|
 | created_at | timestamptz | |
 
 ### `practice_sessions`
