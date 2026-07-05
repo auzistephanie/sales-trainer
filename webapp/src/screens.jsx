@@ -297,7 +297,7 @@ function ThemePicker({ profile, onSaved }) {
         ))}
       </div>
       <div className="theme-custom">
-        <span className="cus-label">自選 accent</span>
+        <span className="cus-label">自定顏色</span>
         <input type="color" value={custom} onChange={e => setCustom(e.target.value)} />
         <button className="cus-apply" disabled={busy} onClick={() => save({ custom_accent_color: custom })}>套用</button>
       </div>
