@@ -61,8 +61,9 @@ def body():
 
 
 def parse_score(text: str) -> int:
-    """由 evaluate_response 文字抽『評分：X／4』→ 0-100。"""
-    m = re.search(r"評分[:：]\s*([0-4])\s*[／/]\s*4", text or "")
+    """由 evaluate_response 文字抽『評分：X／4』→ 0-100。
+    容忍 markdown 星號／空格（AI 常寫成『評分：**3／4**』）。"""
+    m = re.search(r"評分[:：\s\*]*([0-4])[\s\*]*[／/]\s*4", text or "")
     if m:
         return round(int(m.group(1)) / 4 * 100)
     return 70
