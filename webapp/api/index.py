@@ -75,6 +75,8 @@ def practice_start():
     _, err = require_user()
     if err: return err
     b = body()
+    import utils as _u
+    _u.set_recent(b.get("recent") or {})   # 注入前端傳嚟嘅 recent（防重複）
     _display, s = generate_scenario(
         force_qtype=b.get("qtype"), force_industry=b.get("industry"),
         difficulty=b.get("difficulty"),
@@ -85,7 +87,8 @@ def practice_start():
         "qtype": s["qtype"]["name"],
         "difficulty": s["difficulty"],
         "industry": s["industry"],
-        "scenario": s,   # 完整 dict，answer 時原封送返
+        "scenario": s,          # 完整 dict，answer 時原封送返
+        "recent": _u.get_recent(),  # 更新後嘅 recent，前端存返 coach_recent_dna
     })
 
 

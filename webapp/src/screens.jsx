@@ -34,11 +34,15 @@ export function Home({ profile, stats, onStart, onTool }) {
   async function start() {
     setLoading(true); setErr('')
     try {
-      const sc = await api.practiceStart({ difficulty: '中級' })
+      // 讀返上次 recent DNA，傳去 API 防止場景重複
+      const { data: rd } = await supabase.from('coach_recent_dna').select('data').eq('user_id', profile.id).maybeSingle()
+      const sc = await api.practiceStart({ difficulty: '中級', recent: rd?.data || {} })
       await supabase.from('coach_practice_sessions').insert({
         user_id: profile.id, qtype: sc.qtype, industry: sc.industry,
         difficulty: sc.difficulty, scenario: sc
       })
+      // 存返更新後嘅 recent
+      if (sc.recent) await supabase.from('coach_recent_dna').upsert({ user_id: profile.id, data: sc.recent }, { onConflict: 'user_id' })
       onStart(sc)
     } catch (e) { setErr('開始練習失敗：' + e.message) }
     setLoading(false)
@@ -178,15 +182,18 @@ export function Score({ result, onNext, onHome }) {
 /* ---------------- TOOL DETAIL ---------------- */
 const TOOLS = {
   cv: { t: 'CV Health', c: 'var(--brick)', d: '貼上你份 CV 內容，AI 幫你體檢、揪弱位。',
-    fields: [['cv_text', 'textarea', '貼上 CV 全文…']], call: (v) => api.cvHealth(v) },
+    fields: [['cv_text', 'textarea', '貼上 CV 全文…']], call: (v) => api.cvHealth(v),
+    save: (v, r, uid) => supabase.from('coach_cvs').insert({ user_id: uid, filename: '貼上文字', cv_text: v.cv_text, health_score: r.score, health: { message: r.result } }) },
   salary: { t: '薪酬情報', c: 'var(--mustard)', d: '輸入職位同期望人工，睇市場範圍。',
     fields: [['role', 'input', '職位（例：Product Manager）'], ['expected_salary', 'input', '期望月薪（例：45000）'], ['industry', 'input', '行業（可留空）']], call: (v) => api.salary(v) },
   ats: { t: 'ATS 檢查', c: 'var(--forest)', d: '貼 JD 同 CV，睇過機器篩選機率。',
     fields: [['jd_text', 'textarea', '貼上 Job Description…'], ['cv_text', 'textarea', '貼上 CV 全文…']], call: (v) => api.ats(v) },
   negotiate: { t: '談判演練', c: 'var(--orange)', d: '講你嘅 offer 情況，AI 陪你演練談判。',
-    fields: [['offer_details', 'input', 'Offer 情況（職位 / 人工）'], ['user_message', 'textarea', '你想講嘅說話…']], call: (v) => api.negotiate({ ...v, round_num: 1 }) },
+    fields: [['offer_details', 'input', 'Offer 情況（職位 / 人工）'], ['user_message', 'textarea', '你想講嘅說話…']], call: (v) => api.negotiate({ ...v, round_num: 1 }),
+    save: (v, r, uid) => supabase.from('coach_negotiate_logs').insert({ user_id: uid, offer_details: v.offer_details, round_num: 1, messages: [{ user: v.user_message, hr: r.reply || r.result }] }) },
   debrief: { t: '面試覆盤', c: 'var(--brick-dk)', d: '講返你面試經過，AI 幫你覆盤。',
-    fields: [['company', 'input', '公司 / 職位'], ['debrief_text', 'textarea', '面試經過同你嘅感受…']], call: (v) => api.debrief({ job_info: { company: v.company }, debrief_text: v.debrief_text }) },
+    fields: [['company', 'input', '公司 / 職位'], ['debrief_text', 'textarea', '面試經過同你嘅感受…']], call: (v) => api.debrief({ job_info: { company: v.company }, debrief_text: v.debrief_text }),
+    save: (v, r, uid) => supabase.from('coach_debrief_logs').insert({ user_id: uid, job_info: { company: v.company }, debrief_text: v.debrief_text, ai_feedback: r.result }) },
   mbti: { t: 'MBTI 檢測', c: '#6b7a4f', d: '20 題快速檢測，教練會照你性格調整 coaching。', mbti: true }
 }
 
@@ -202,6 +209,7 @@ export function ToolDetail({ toolKey, profile, onBack }) {
     try {
       const r = await cfg.call(vals)
       setOut(typeof r === 'string' ? r : (r.result || r.message || JSON.stringify(r, null, 2)))
+      if (cfg.save && profile?.id) { try { await cfg.save(vals, r, profile.id) } catch (e) { /* 存 DB 失敗唔阻顯示 */ } }
     } catch (e) { setErr('失敗：' + e.message) }
     setLoading(false)
   }
