@@ -26,6 +26,7 @@ export const api = {
   salary: (opts) => authFetch('/api/app/salary', opts),
   ats: (opts) => authFetch('/api/app/ats', opts),
   negotiate: (opts) => authFetch('/api/app/negotiate', opts),
+  negotiateSummary: (opts) => authFetch('/api/app/negotiate/summary', opts),
   debrief: (opts) => authFetch('/api/app/debrief', opts),
   tip: () => authFetch('/api/app/tip', {}),
   mbtiQuestions: () => authFetch('/api/app/mbti/questions', {}),

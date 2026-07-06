@@ -189,13 +189,85 @@ const TOOLS = {
     fields: [['role', 'input', '職位（例：Product Manager）'], ['expected_salary', 'input', '期望月薪（例：45000）'], ['industry', 'input', '行業（可留空）']], call: (v) => api.salary(v) },
   ats: { t: 'ATS 檢查', c: 'var(--forest)', d: '貼 JD 同 CV，睇過機器篩選機率。',
     fields: [['jd_text', 'textarea', '貼上 Job Description…'], ['cv_text', 'textarea', '貼上 CV 全文…']], call: (v) => api.ats(v) },
-  negotiate: { t: '談判演練', c: 'var(--orange)', d: '講你嘅 offer 情況，AI 陪你演練談判。',
-    fields: [['offer_details', 'input', 'Offer 情況（職位 / 人工）'], ['user_message', 'textarea', '你想講嘅說話…']], call: (v) => api.negotiate({ ...v, round_num: 1 }),
-    save: (v, r, uid) => supabase.from('coach_negotiate_logs').insert({ user_id: uid, offer_details: v.offer_details, round_num: 1, messages: [{ user: v.user_message, hr: r.reply || r.result }] }) },
+  negotiate: { t: '談判演練', c: 'var(--orange)', d: '講你嘅 offer 情況，AI 扮 HR 同你多回合演練，最後畀總結評分。', chat: true },
   debrief: { t: '面試覆盤', c: 'var(--brick-dk)', d: '講返你面試經過，AI 幫你覆盤。',
     fields: [['company', 'input', '公司 / 職位'], ['debrief_text', 'textarea', '面試經過同你嘅感受…']], call: (v) => api.debrief({ job_info: { company: v.company }, debrief_text: v.debrief_text }),
     save: (v, r, uid) => supabase.from('coach_debrief_logs').insert({ user_id: uid, job_info: { company: v.company }, debrief_text: v.debrief_text, ai_feedback: r.result }) },
   mbti: { t: 'MBTI 檢測', c: '#6b7a4f', d: '20 題快速檢測，教練會照你性格調整 coaching。', mbti: true }
+}
+
+function NegotiateChat({ profile }) {
+  const [stage, setStage] = useState('setup')
+  const [offer, setOffer] = useState('')
+  const [msgs, setMsgs] = useState([])
+  const [history, setHistory] = useState([])
+  const [input, setInput] = useState('')
+  const [round, setRound] = useState(1)
+  const [loading, setLoading] = useState(false)
+  const [summary, setSummary] = useState(null)
+  const [err, setErr] = useState('')
+
+  function begin() {
+    if (!offer.trim()) return
+    setStage('chat')
+    setMsgs([{ who: 'hr', text: `📋 Offer：${offer}\n開始啦，試下爭取更好條件。` }])
+  }
+
+  async function send() {
+    if (!input.trim() || loading) return
+    const myMsg = input; setInput('')
+    setMsgs(m => [...m, { who: 'me', text: myMsg }])
+    setLoading(true); setErr('')
+    try {
+      const r = await api.negotiate({ offer_details: offer, user_message: myMsg, round_num: round, history })
+      const reply = r.reply || r.result
+      const coach = (r.result || '').split('━━━━━━━━━━').slice(1).join('').trim()
+      setMsgs(m => [...m, { who: 'hr', text: reply }, ...(coach ? [{ who: 'coach', text: coach }] : [])])
+      setHistory(h => [...h, { user: myMsg, hr: reply }])
+      setRound(n => n + 1)
+    } catch (e) { setErr('失敗：' + e.message) }
+    setLoading(false)
+  }
+
+  async function finish() {
+    if (!history.length || loading) return
+    setLoading(true); setErr('')
+    try {
+      const r = await api.negotiateSummary({ history })
+      setSummary(r.result)
+      try { await supabase.from('coach_negotiate_logs').insert({ user_id: profile.id, offer_details: offer, round_num: round - 1, messages: { history, summary: r.result } }) } catch (e) { /* ignore */ }
+    } catch (e) { setErr('總結失敗：' + e.message) }
+    setLoading(false)
+  }
+
+  if (stage === 'setup') {
+    return (
+      <>
+        <input className="field" placeholder="Offer 情況（例：PM offer HK$40k）" value={offer} onChange={e => setOffer(e.target.value)} />
+        <button className="cta-big" style={{ background: 'var(--orange)' }} onClick={begin} disabled={!offer.trim()}>開始談判</button>
+      </>
+    )
+  }
+
+  return (
+    <>
+      <div className="chat">
+        {msgs.map((m, i) => m.who === 'coach'
+          ? <div key={i} className="fb-card" style={{ margin: '2px 0 8px' }}><div className="fb-t" style={{ color: 'var(--brick-dk)' }}>🎯 教練點評</div><p>{m.text}</p></div>
+          : <div key={i} className={'msg ' + (m.who === 'me' ? 'me' : 'bot')}>{m.who === 'hr' ? '🧑‍💼 ' : ''}{m.text}</div>
+        )}
+        {loading && !summary && <div className="msg bot">HR 諗緊…</div>}
+      </div>
+      {err && <div className="err">{err}</div>}
+      {summary
+        ? <div className="fb-card"><div className="fb-t" style={{ color: 'var(--forest)' }}>💼 談判總結</div><p>{summary}</p></div>
+        : <div className="answer-box">
+            <textarea value={input} onChange={e => setInput(e.target.value)} placeholder="你想點回應 HR？…" />
+            <button className="submit-a" style={{ background: 'var(--orange)' }} onClick={send} disabled={loading || !input.trim()}>送出（第 {round} 回合）</button>
+            {history.length > 0 && <button className="cta-big" style={{ background: 'var(--forest)', marginTop: 10 }} onClick={finish} disabled={loading}>結束 · 睇總結評分</button>}
+          </div>}
+    </>
+  )
 }
 
 export function ToolDetail({ toolKey, profile, onBack }) {
@@ -224,7 +296,9 @@ export function ToolDetail({ toolKey, profile, onBack }) {
       <DiamondBand height={16} />
       <p style={{ fontSize: 13.5, color: 'var(--ink-soft)', marginBottom: 16 }}>{cfg.d}</p>
 
-      {cfg.mbti ? (
+      {cfg.chat ? (
+        <NegotiateChat profile={profile} />
+      ) : cfg.mbti ? (
         <MbtiQuiz
           showSkip={false}
           onSkip={onBack}

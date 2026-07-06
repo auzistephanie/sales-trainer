@@ -16,7 +16,7 @@ from interview_trainer import (
     calculate_cv_health, format_cv_health_message,
     generate_salary_benchmark, parse_salary_input,
     calculate_ats_score, format_ats_message,
-    generate_negotiate_response, extract_negotiate_reply,
+    generate_negotiate_response, extract_negotiate_reply, generate_negotiate_summary,
     generate_debrief,
 )
 from mbti_checker import MBTI_QUESTIONS, calculate_mbti, MBTI_QUICK_DESC
@@ -145,6 +145,14 @@ def negotiate():
         int(b.get("round_num", 1)), b.get("history") or [],
     )
     return jsonify({"result": text, "reply": extract_negotiate_reply(text)})
+
+
+@app.route("/api/app/negotiate/summary", methods=["POST"])
+def negotiate_summary():
+    _, err = require_user()
+    if err: return err
+    b = body()
+    return jsonify({"result": generate_negotiate_summary(b.get("history") or [])})
 
 
 @app.route("/api/app/debrief", methods=["POST"])
