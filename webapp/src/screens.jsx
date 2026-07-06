@@ -74,7 +74,8 @@ export function Home({ profile, stats, onStart, onTool }) {
           ['ats', '✅', 'ATS 檢查', '過機器篩選', 'var(--forest)'],
           ['negotiate', '🤝', '談判演練', '傾人工對白', 'var(--orange)'],
           ['debrief', '📝', '面試覆盤', '即刻執返好', 'var(--brick-dk)'],
-          ['mbti', '🧭', 'MBTI', '個人化 coaching', '#6b7a4f']
+          ['mbti', '🧭', 'MBTI', '個人化 coaching', '#6b7a4f'],
+          ['jobs', '📋', '工作追蹤', '記低申請進度', 'var(--brick-dk)']
         ].map(([k, ic, t, d, c]) => (
           <button key={k} className="fcard" onClick={() => onTool(k)}>
             <div className="fic" style={{ background: c }}>{ic}</div>
@@ -193,7 +194,72 @@ const TOOLS = {
   debrief: { t: '面試覆盤', c: 'var(--brick-dk)', d: '講返你面試經過，AI 幫你覆盤。',
     fields: [['company', 'input', '公司 / 職位'], ['debrief_text', 'textarea', '面試經過同你嘅感受…']], call: (v) => api.debrief({ job_info: { company: v.company }, debrief_text: v.debrief_text }),
     save: (v, r, uid) => supabase.from('coach_debrief_logs').insert({ user_id: uid, job_info: { company: v.company }, debrief_text: v.debrief_text, ai_feedback: r.result }) },
-  mbti: { t: 'MBTI 檢測', c: '#6b7a4f', d: '20 題快速檢測，教練會照你性格調整 coaching。', mbti: true }
+  mbti: { t: 'MBTI 檢測', c: '#6b7a4f', d: '20 題快速檢測，教練會照你性格調整 coaching。', mbti: true },
+  jobs: { t: '工作追蹤', c: 'var(--forest)', d: '記低你申請緊嘅工同狀態，一眼睇晒進度。', jobs: true }
+}
+
+const JOB_STATUSES = ['儲低', '已投', '面試中', 'Offer', '唔要']
+const JOB_STATUS_COLOR = { '儲低': 'rgba(42,33,26,.12)', '已投': 'rgba(201,154,60,.25)', '面試中': 'rgba(193,104,58,.22)', 'Offer': 'rgba(47,74,62,.2)', '唔要': 'rgba(193,80,58,.15)' }
+
+function JobsManager({ profile }) {
+  const [jobs, setJobs] = useState([])
+  const [adding, setAdding] = useState(false)
+  const [f, setF] = useState({ company: '', role: '', url: '', status: '儲低' })
+  const [loading, setLoading] = useState(true)
+
+  function load() {
+    supabase.from('coach_jobs').select('*').order('created_at', { ascending: false })
+      .then(({ data }) => { setJobs(data || []); setLoading(false) })
+  }
+  useEffect(() => { load() }, [])
+
+  async function add() {
+    if (!f.company.trim()) return
+    await supabase.from('coach_jobs').insert({ user_id: profile.id, company: f.company, role: f.role, url: f.url, status: f.status })
+    setF({ company: '', role: '', url: '', status: '儲低' }); setAdding(false); load()
+  }
+  async function setStatus(id, status) { await supabase.from('coach_jobs').update({ status }).eq('id', id); load() }
+  async function del(id) { await supabase.from('coach_jobs').delete().eq('id', id); load() }
+
+  return (
+    <>
+      {!adding && (
+        <button className="cta-big" style={{ background: 'var(--forest)' }} onClick={() => setAdding(true)}>＋ 新增一份工</button>
+      )}
+      {adding && (
+        <div className="answer-box" style={{ borderStyle: 'solid' }}>
+          <input className="field" placeholder="公司名 *" value={f.company} onChange={e => setF({ ...f, company: e.target.value })} />
+          <input className="field" placeholder="職位" value={f.role} onChange={e => setF({ ...f, role: e.target.value })} />
+          <input className="field" placeholder="JD 連結（可留空）" value={f.url} onChange={e => setF({ ...f, url: e.target.value })} />
+          <select className="field" value={f.status} onChange={e => setF({ ...f, status: e.target.value })}>
+            {JOB_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button className="submit-a" style={{ background: 'var(--forest)' }} onClick={add} disabled={!f.company.trim()}>儲低</button>
+            <button className="submit-a" style={{ background: 'var(--ink-soft)' }} onClick={() => setAdding(false)}>取消</button>
+          </div>
+        </div>
+      )}
+
+      {loading ? <div className="spin" /> : jobs.length === 0
+        ? <div className="result-box">仲未有工，撳上面新增一份先。</div>
+        : jobs.map(j => (
+          <div key={j.id} className="list-card" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div style={{ flex: 1 }}>
+                <h3>{j.company}</h3>
+                <p>{j.role || '—'}{j.url ? ' · 有 JD' : ''}</p>
+              </div>
+              <button onClick={() => del(j.id)} style={{ background: 'none', border: 'none', color: 'var(--brick)', fontSize: 18 }}>✕</button>
+            </div>
+            <select className="field" style={{ margin: 0, background: JOB_STATUS_COLOR[j.status] || '#fff', fontWeight: 700 }}
+              value={j.status} onChange={e => setStatus(j.id, e.target.value)}>
+              {JOB_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+          </div>
+        ))}
+    </>
+  )
 }
 
 function NegotiateChat({ profile }) {
@@ -296,7 +362,9 @@ export function ToolDetail({ toolKey, profile, onBack }) {
       <DiamondBand height={16} />
       <p style={{ fontSize: 13.5, color: 'var(--ink-soft)', marginBottom: 16 }}>{cfg.d}</p>
 
-      {cfg.chat ? (
+      {cfg.jobs ? (
+        <JobsManager profile={profile} />
+      ) : cfg.chat ? (
         <NegotiateChat profile={profile} />
       ) : cfg.mbti ? (
         <MbtiQuiz
