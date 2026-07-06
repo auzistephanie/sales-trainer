@@ -102,7 +102,8 @@ export function Practice({ scenario, profile, onBack, onScored }) {
       const r = await api.practiceAnswer({ scenario: fullScenario, answer, profile })
       // 存答案
       await supabase.from('coach_practice_answers').insert({
-        user_id: profile.id, answer_text: answer, score: r.score, feedback: { text: r.feedback }
+        user_id: profile.id, answer_text: answer, score: r.score,
+        feedback: { text: r.feedback }, qtype: scenario.qtype || null
       })
       await updateStats(profile.id, r.score)
       onScored(r)
@@ -257,9 +258,22 @@ export function ToolDetail({ toolKey, profile, onBack }) {
 /* ---------------- STATS ---------------- */
 export function Stats({ stats, onPractice }) {
   const [bars, setBars] = useState([])
+  const [weak, setWeak] = useState([])
   useEffect(() => {
     supabase.from('coach_practice_answers').select('score,created_at').order('created_at', { ascending: false }).limit(7)
       .then(({ data }) => setBars((data || []).reverse()))
+    // 最弱題型：由所有有 qtype 嘅答案，按題型算平均分，最低分排先
+    supabase.from('coach_practice_answers').select('qtype,score').not('qtype', 'is', null).limit(500)
+      .then(({ data }) => {
+        const g = {}
+        for (const a of data || []) {
+          if (!g[a.qtype]) g[a.qtype] = { sum: 0, n: 0 }
+          g[a.qtype].sum += a.score || 0; g[a.qtype].n += 1
+        }
+        const arr = Object.entries(g).map(([q, v]) => ({ qtype: q, avg: Math.round(v.sum / v.n), n: v.n }))
+        arr.sort((a, b) => a.avg - b.avg)
+        setWeak(arr.slice(0, 2))
+      })
   }, [])
   const max = Math.max(100, ...bars.map(b => b.score || 0))
   return (
@@ -280,6 +294,18 @@ export function Stats({ stats, onPractice }) {
         <div className="stat"><span className="num">{stats?.total_answered ?? 0}</span><small>累積題數</small></div>
         <div className="stat"><span className="num">{stats?.avg_score ? Math.round(stats.avg_score) : 0}</span><small>平均分</small></div>
       </div>
+      {weak.length > 0 && (
+        <>
+          <div className="sect-t" style={{ marginTop: 22 }}>最弱題型（建議練）</div>
+          {weak.map((w, i) => (
+            <button key={w.qtype} className="list-card" onClick={onPractice}>
+              <div className="li-ic" style={{ background: i === 0 ? 'rgba(193,80,58,.15)' : 'rgba(201,154,60,.2)' }}>{i === 0 ? '😰' : '💬'}</div>
+              <div><h3>{w.qtype}</h3><p>平均 {w.avg} 分 · 練咗 {w.n} 次</p></div>
+              <span className="arw">›</span>
+            </button>
+          ))}
+        </>
+      )}
       <button className="cta-big" style={{ marginTop: 20 }} onClick={onPractice}>🎬 繼續練習</button>
     </div>
   )
