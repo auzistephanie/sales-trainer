@@ -183,9 +183,7 @@ export function Score({ result, onNext, onHome }) {
 
 /* ---------------- TOOL DETAIL ---------------- */
 const TOOLS = {
-  cv: { t: 'CV Health', c: 'var(--brick)', d: '貼上你份 CV 內容，AI 幫你體檢、揪弱位。',
-    fields: [['cv_text', 'textarea', '貼上 CV 全文…']], call: (v) => api.cvHealth(v),
-    save: (v, r, uid) => supabase.from('coach_cvs').insert({ user_id: uid, filename: '貼上文字', cv_text: v.cv_text, health_score: r.score, health: { message: r.result } }) },
+  cv: { t: 'CV Health', c: 'var(--brick)', d: '上載 PDF/Word 或貼文字，AI 幫你體檢、揪弱位。', cvtool: true },
   salary: { t: '薪酬情報', c: 'var(--mustard)', d: '輸入職位同期望人工，睇市場範圍。',
     fields: [['role', 'input', '職位（例：Product Manager）'], ['expected_salary', 'input', '期望月薪（例：45000）'], ['industry', 'input', '行業（可留空）']], call: (v) => api.salary(v) },
   ats: { t: 'ATS 檢查', c: 'var(--forest)', d: '貼 JD 同 CV，睇過機器篩選機率。',
@@ -200,6 +198,58 @@ const TOOLS = {
 
 const JOB_STATUSES = ['儲低', '已投', '面試中', 'Offer', '唔要']
 const JOB_STATUS_COLOR = { '儲低': 'rgba(42,33,26,.12)', '已投': 'rgba(201,154,60,.25)', '面試中': 'rgba(193,104,58,.22)', 'Offer': 'rgba(47,74,62,.2)', '唔要': 'rgba(193,80,58,.15)' }
+
+function CvHealthTool({ profile }) {
+  const [text, setText] = useState('')
+  const [filename, setFilename] = useState('')
+  const [extracting, setExtracting] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [out, setOut] = useState(null)
+  const [err, setErr] = useState('')
+
+  async function onFile(e) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setExtracting(true); setErr('')
+    try {
+      const r = await api.cvExtract(file)
+      setText(r.text || '')
+      setFilename(r.filename || file.name)
+      if (!r.text) setErr('抽唔到文字（可能係掃描版 PDF），試下貼文字。')
+    } catch (e) { setErr('讀檔失敗：' + e.message) }
+    setExtracting(false)
+  }
+
+  async function run() {
+    if (!text.trim()) return
+    setLoading(true); setErr(''); setOut(null)
+    try {
+      const r = await api.cvHealth({ cv_text: text })
+      setOut(r.result)
+      try {
+        await supabase.from('coach_cvs').insert({ user_id: profile.id, filename: filename || '貼上文字', cv_text: text, health_score: r.score, health: { message: r.result } })
+      } catch (e) { /* ignore */ }
+    } catch (e) { setErr('分析失敗：' + e.message) }
+    setLoading(false)
+  }
+
+  return (
+    <>
+      <label className="upload" style={{ display: 'block', cursor: 'pointer' }}>
+        <div className="u-ic">📄</div>
+        <p>{extracting ? '讀緊檔案…' : filename ? `已讀：${filename}（可再撳換）` : '撳我上載 CV（PDF / Word）'}</p>
+        <input type="file" accept=".pdf,.docx" onChange={onFile} style={{ display: 'none' }} />
+      </label>
+      <p style={{ fontSize: 12, color: 'var(--ink-soft)', textAlign: 'center', margin: '-6px 0 12px' }}>或者直接貼文字 ↓</p>
+      <textarea className="field" placeholder="貼上 CV 全文…" value={text} onChange={e => setText(e.target.value)} />
+      {err && <div className="err">{err}</div>}
+      <button className="cta-big" style={{ background: 'var(--brick)' }} onClick={run} disabled={loading || extracting || !text.trim()}>
+        {loading ? 'AI 分析緊…' : '開始分析'}
+      </button>
+      {out && <div className="result-box">{out}</div>}
+    </>
+  )
+}
 
 function JobsManager({ profile }) {
   const [jobs, setJobs] = useState([])
@@ -362,7 +412,9 @@ export function ToolDetail({ toolKey, profile, onBack }) {
       <DiamondBand height={16} />
       <p style={{ fontSize: 13.5, color: 'var(--ink-soft)', marginBottom: 16 }}>{cfg.d}</p>
 
-      {cfg.jobs ? (
+      {cfg.cvtool ? (
+        <CvHealthTool profile={profile} />
+      ) : cfg.jobs ? (
         <JobsManager profile={profile} />
       ) : cfg.chat ? (
         <NegotiateChat profile={profile} />

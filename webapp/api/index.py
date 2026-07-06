@@ -2,7 +2,7 @@
 純 AI 運算層：包 interview_trainer 函數，唔掂 DB／secret。
 每個 request 帶 Supabase JWT，去 Supabase /auth/v1/user 驗證。
 DB 讀寫喺前端用 supabase-js + RLS 做。"""
-import sys, os, re
+import sys, os, re, io
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent / "_lib"))
@@ -112,6 +112,31 @@ def cv_health():
     if err: return err
     health = calculate_cv_health(body().get("cv_text", ""))
     return jsonify({"result": format_cv_health_message(health), "score": health["total"]})
+
+
+@app.route("/api/app/cv/extract", methods=["POST"])
+def cv_extract():
+    _, err = require_user()
+    if err: return err
+    f = request.files.get("file")
+    if not f:
+        return jsonify({"error": "冇檔案"}), 400
+    name = (f.filename or "").lower()
+    data = f.read()
+    try:
+        if name.endswith(".pdf"):
+            import pdfplumber
+            with pdfplumber.open(io.BytesIO(data)) as pdf:
+                text = "\n".join((p.extract_text() or "") for p in pdf.pages)
+        elif name.endswith(".docx"):
+            import docx
+            d = docx.Document(io.BytesIO(data))
+            text = "\n".join(p.text for p in d.paragraphs)
+        else:
+            text = data.decode("utf-8", "ignore")
+    except Exception as e:
+        return jsonify({"error": f"抽文字失敗：{e}"}), 500
+    return jsonify({"text": text.strip(), "filename": f.filename})
 
 
 @app.route("/api/app/salary", methods=["POST"])
