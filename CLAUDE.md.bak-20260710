@@ -4,12 +4,6 @@ AI 生成面試場景，評估回答，追蹤進度，MBTI 個人化 coaching。
 
 > 詳細資訊拆咗落 `docs/*.md`，按需 read_file，唔好靠記憶或猜測。
 
-## ✍️ 寫入分流（MANDATORY — 想更新本檔前先讀）
-
-- **改動記錄／開發史** → root `CHANGELOG.md` **頂部**，唔准 append 落本檔；本檔硬上限 **100 行／6KB**
-- 本檔只准改：路由行、現行規則本身變咗。完整分流表 → `stephanie-personal/docs/ai-governance/04-MAINTENANCE.md` §0
-
-
 ## 📖 文件讀取規則（MANDATORY）
 
 | 需要嘅資訊 | 讀邊份 |
