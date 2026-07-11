@@ -4,7 +4,7 @@ from pathlib import Path
 from urllib.parse import quote
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from flask import Flask, jsonify
+from flask import Flask, request, jsonify
 from dotenv import load_dotenv
 load_dotenv(Path(__file__).parent.parent / ".env")
 
@@ -241,6 +241,9 @@ def scan_new_jobs() -> int:
 
 @app.route("/api/daily_check", methods=["GET", "POST"])
 def daily_check():
+    # 保護：cron 觸發須帶正確 key，防外部濫觸發（燒 API / 洗版）
+    if request.args.get("key") != os.getenv("CRON_SECRET"):
+        return jsonify({"ok": False}), 403
     followups_sent = check_followups()
     jobs_pushed     = scan_new_jobs()
     is_sunday = datetime.now().weekday() == 6  # Monday=0 ... Sunday=6

@@ -9,6 +9,32 @@ import streamlit as st
 from utils import load_jobs, save_jobs, load_profile
 from interview_trainer import generate_job_questions, generate_job_tips
 
+
+def _require_password():
+    """密碼閘：未通過前唔載入任何個人資料。"""
+    import os, hmac
+    pw = ""
+    try:
+        pw = st.secrets.get("APP_PASSWORD", "")
+    except Exception:
+        pw = ""
+    pw = pw or os.getenv("APP_PASSWORD", "")
+    if not pw:
+        st.error("🔒 APP_PASSWORD 未設定，拒絕存取。請喺 Streamlit secrets 設定。")
+        st.stop()
+    if st.session_state.get("_crm_authed"):
+        return
+    entered = st.text_input("🔒 請輸入密碼", type="password")
+    if not entered:
+        st.stop()
+    if not hmac.compare_digest(entered, pw):
+        st.error("密碼錯誤")
+        st.stop()
+    st.session_state["_crm_authed"] = True
+
+
+_require_password()
+
 STAGE_ORDER = ["Applied", "Phone Screen", "1st Interview", "2nd Interview", "Offer", "Rejected"]
 
 # Kanban 由 5 欄壓縮做 3 組，每欄闊啲、窄卡片問題可以進一步紓緩

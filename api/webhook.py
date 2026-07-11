@@ -429,6 +429,10 @@ def cmd_mbti(text: str):
 
 def handle_document(document: dict):
     """處理用戶上傳嘅 resume（PDF / DOCX）。"""
+    # 檔案大小上限 8MB，防 serverless 記憶體耗盡
+    if document.get("file_size", 0) > 8 * 1024 * 1024:
+        send_telegram("⚠️ 檔案太大（上限 8MB），請壓縮後再上傳。")
+        return
     mime  = document.get("mime_type", "")
     fname = document.get("file_name", "").lower()
 
@@ -1654,7 +1658,18 @@ def handle_message(text):
 
 @app.route("/api/webhook", methods=["POST"])
 def webhook():
+    # 1) 驗 Telegram secret token（setWebhook 時註冊，非 Telegram 來源直接擋）
+    _secret = os.getenv("TELEGRAM_WEBHOOK_SECRET", "")
+    if not _secret or request.headers.get("X-Telegram-Bot-Api-Secret-Token") != _secret:
+        return jsonify({"ok": False}), 403
+
     update = request.json or {}
+
+    # 2) 驗寄件者為本人（OWNER_CHAT_ID），非本人靜默丟棄
+    _owner = os.getenv("OWNER_CHAT_ID", "")
+    _incoming = (update.get("message") or update.get("callback_query", {}).get("message") or {}).get("chat", {}).get("id")
+    if not _owner or str(_incoming) != str(_owner):
+        return jsonify({"ok": True})
 
     # 抽取 chat_id，令 send_telegram 知道發去邊
     trigger = ""
@@ -1691,13 +1706,21 @@ def webhook():
 @app.route("/api/set_webhook", methods=["GET"])
 def set_webhook():
     """部署後訪問呢個 URL — 自動設定 webhook + 更新指令清單。"""
+    # 保護：只接受帶正確 key 嘅請求，防外部亂設 webhook
+    if request.args.get("key") != os.getenv("CRON_SECRET"):
+        return jsonify({"ok": False}), 403
+
     host = request.host_url.rstrip("/")
     url  = f"{host}/api/webhook"
 
-    # 1. 設定 webhook
+    # 1. 設定 webhook（註冊 secret_token，令 Telegram 每次帶 X-Telegram-Bot-Api-Secret-Token）
     wh_resp = req.post(
         f"https://api.telegram.org/bot{TOKEN()}/setWebhook",
-        json={"url": url, "allowed_updates": ["message", "callback_query"]},
+        json={
+            "url": url,
+            "allowed_updates": ["message", "callback_query"],
+            "secret_token": os.getenv("TELEGRAM_WEBHOOK_SECRET"),
+        },
         timeout=10,
     ).json()
 
