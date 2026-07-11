@@ -134,6 +134,9 @@ def sync_local_head(commit_sha, owner, repo, token):
     if run(["git", "fetch", auth_url, "main"]).returncode != 0:
         print("   (本地 HEAD 未同步：fetch 失敗，唔影響已 push 內容)")
         return
+    # 順手更新 refs/remotes/origin/main，等 `git status` 嘅 ahead/behind 都準——
+    # 唔係淨係 HEAD 啱咗但 tracking ref 舊咗，繼續呃人話「ahead N」。
+    run(["git", "update-ref", "refs/remotes/origin/main", commit_sha])
     if run(["git", "reset", "--mixed", commit_sha]).returncode == 0:
         print("   本地 HEAD 已對齊 remote — git status 現時乾淨 ✨")
     else:
@@ -180,6 +183,7 @@ def main():
 
     if not tree:
         print("Nothing to push — 遠端已同步。")
+        sync_local_head(base_sha, owner, repo, token)
         return
 
     new_tree = api("POST", f"{base}/trees", token, {"base_tree": base_tree, "tree": tree})
