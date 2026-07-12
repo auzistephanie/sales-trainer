@@ -2,6 +2,7 @@
 
 > 唔會自動讀入每次對話 context，需要時先 `read_file`。
 
+- **2026-07-12**：搬機至 Google Drive Mirror——canonical 路徑由 `~/sales-trainer` 改為 `~/Desktop/Stephanie-Google Drive/dev/sales-trainer`；HEAD／`git fsck`／檔案數（3206 個）核對通過；`stephanie-personal/scripts/autopush-registry.txt` 已更新新路徑；舊 `~/sales-trainer` 已加 `_MIGRATED_TO_GOOGLE_DRIVE.txt` 標記，確認後可刪。
 - **2026-07-10**：`github_push.py` 修好「push 完 `git status` 仍顯示大量假改動」——script 經 GitHub API 寫 remote、唔 advance 本地 HEAD，令 status 成日同舊 HEAD 比。Fix：push 成功後加 `sync_local_head()`（帶 token fetch + `git reset --mixed` 對齊；token 唔寫檔唔 print、失敗唔阻塞、只郁 HEAD+index）；已清殘留 `.git/index.lock` 並驗證 status 歸零。
 - **2026-07-02**：求職 CRM 網頁（Streamlit）UI 重做 —— 原本淨係 default 主題 + `st.expander` + emoji 分辨狀態，冇卡片感。新版：metric 卡片化、kanban 卡加狀態色帶（灰=Applied／橙=Phone Screen／紫=Interview／綠=Offer／紅=Rejected）+ status badge、申請漏斗由純文字 metric 改做 bar chart。**新增功能**：kanban 卡直接加咗「更新狀態」selectbox，寫返同一個 Redis key `interview_jobs`，同 Telegram `/listjobs → 更新狀態` 共用同一份資料、雙向同步。用 `streamlit.testing.v1.AppTest` 實測跑過 `pages/求職_CRM.py`（連真實 Upstash 資料），確認冇 exception、metric/badge/kanban/漏斗都正常渲染先報告完成
 - **2026-06-23**：初版創建，銷售話術訓練，10 種拒絕類型
