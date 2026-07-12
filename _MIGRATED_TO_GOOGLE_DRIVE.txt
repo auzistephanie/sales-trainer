@@ -1,0 +1,5 @@
+⚠️ 呢個 folder 已喺 2026-07-12 複製去 Google Drive：
+~/Desktop/Stephanie-Google Drive/dev/sales-trainer
+
+git HEAD 一致、fsck 乾淨、檔案數已核對，複製成功。
+確認 Google Drive 版本用得掂之後，可以將呢個舊 folder（~/sales-trainer）拖去垃圾桶。
