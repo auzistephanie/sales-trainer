@@ -57,7 +57,7 @@ AI 生成面試場景，評估回答，追蹤進度，MBTI 個人化 coaching。
 
 正本：`stephanie-personal/docs/ai-governance/`（00 診斷 · 01 調度守則 · 02 判斷 rubric · 03 派工模板 · 04 維護協議 · 05 給未來 session 的信）。
 決定咗要派 subagent（門檻見 01 §1，唔係乜都派）先讀 01+03；報「完成」前過一次 02 §R2。
-⚠️ Session 冇 mount stephanie-personal folder → **叫 Stephanie 連埋佢**，唔好靜靜地跳過成套制度。
+⚠️ Session 冇 mount stephanie-personal folder（REQUIRED core folder，唔係 optional）→ **叫 Stephanie 連埋佢**，唔好靜靜地跳過成套制度。
 
 ## Git Push
 
