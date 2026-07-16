@@ -27,7 +27,7 @@ AI 生成面試場景，評估回答，追蹤進度，MBTI 個人化 coaching。
 - `api/daily_check.py` — 每日 10:00 HKT 由 cron-job.org 觸發（followup 提醒/週報/自動搵工）
 - `mbti_checker.py` — MBTI 20題檢測（`/mbti`）· `utils.py` — Redis I/O、Telegram 發送
 - `job_crm.py` + `pages/` — Streamlit 求職 CRM（https://sales-trainer-jatucpwszxyvoq5kpt7bav.streamlit.app）
-- `github_push.py` — push 用呢個，唔用 git CLI：`python3 github_push.py "<msg>"`
+- `github_push.py` — push 用呢個，唔用 git CLI：`python3 github_push.py "<msg>"`（裝機步驟正本 → `stephanie-personal/docs/PUSH-SETUP.md`）
 - `landing.html` — 復古滾動旅程 landing page（Vercel 靜態，`/landing.html`）
 - `webapp/` — **真 App（Web/PWA）**：Vite React 前端 + Flask AI API，Google 登入，跨裝置同步。詳見 `docs/APP_SPEC.md`
 
