@@ -59,6 +59,10 @@ AI 生成面試場景，評估回答，追蹤進度，MBTI 個人化 coaching。
 決定咗要派 subagent（門檻見 01 §1，唔係乜都派）先讀 01+03；報「完成」前過一次 02 §R2。
 ⚠️ Session 冇 mount stephanie-personal folder（REQUIRED core folder，唔係 optional）→ **叫 Stephanie 連埋佢**，唔好靜靜地跳過成套制度。
 
+## Backlog（未做，記低就算）
+
+- 語音互動模擬面試 avatar（Vidu S1 real-time 語音控制 digital human）：用家開聲同 AI 面試官即時對話練習，取代宜家文字問答。成本≈$0.0075/秒，10分鐘 session≈$4.5。2026-07-17 諗到，未拍板做。
+
 ## Git Push
 
 每次改完檔案自動 push（`python3 github_push.py "<具體 commit msg>"`），唔使另外要求。
