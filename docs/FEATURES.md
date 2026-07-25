@@ -59,6 +59,10 @@
 - **計分對象＝tailored CV**：先 `flatten_cv_data(cv_data)` 攤平成純文字先計。（2026-07-25 前錯用原版 CV，見 CHANGELOG）
 - **雙分數**：同一組 keyword 分別計 tailored（`ats`）同原版 CV（`base`，靠 `keywords=` 參數重用，唔會多叫一次 API）；`format_ats_message(ats, baseline_score)` 嘅 delta 係 tailored − 原版，**唔再同 `cv_health_score` 比**（兩者係唔同指標）
 - `smart_match()`：完全命中 → 否則 normalize + `_ats_stem()` 詞根 + multi-word ≥70% token 命中當 match。**只改「點樣量」，唔會為谷分而改 CV 內容**
+- Keyword 抽取 prompt 有 INCLUDE ONLY / EXCLUDE 兩段：只收 hard skills / 工具 / 系統 / 學歷 / 行業術語 / 核心職能；**明確排除**僱主自家 programme 品牌名（如 "EngSeeds Programme"）、合約年期、工作模式（"1-year contract"、"5-Day Work"）、公司名 / 地區 / 人工 / 福利 / 工時，以及 "good communication" 類通用廢詞。強制 `Output in ENGLISH only, exactly as written in the JD`
+- `_ats_stem()`（2026-07-25 加強）：兩層剪詞尾 `ions/ion/ments/ment/ings/ing/ies/ied/ed/es/s` + 去尾 `e`，所以 coordinate / coordinated / coordinating / coordination 全部歸一做 `coordinat`，management / managing / manage → `manag`
+- `smart_match()` 拆 multi-word 時濾走長度 1 嘅 token（`len(p) > 1`）：`Bachelor's degree` 會拆出 `bachelor / s / degree`，嗰個 `s` 會令命中率跌到 2/3 < 70% 而錯判 miss
+- `improvement` 唔再重複列 missing 清單（上面 `⚠️` 行已經列曬），只留一句「有就話我知我幫你加返；冇嘅話唔會幫你作」
 - 存 `job["ats_score"]` + `job["ats_baseline"]`（JD session 同樣）
 
 **薪酬談判 Negotiate**（`/negotiate`）
