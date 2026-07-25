@@ -427,7 +427,8 @@ def evaluate_response(user_response: str, scenario: dict, max_retries: int = 3, 
     for attempt in range(1, max_retries + 1):
         try:
             resp = ai_client.chat.completions.create(
-                model="deepseek-chat",
+                model="deepseek-v4-flash",
+            extra_body={"thinking": {"type": "disabled"}},
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.8,
                 max_tokens=1400,
@@ -482,7 +483,8 @@ def analyze_conversation(conversation: str, profile: dict) -> str:
 
     try:
         resp = ai_client.chat.completions.create(
-            model="deepseek-chat",
+            model="deepseek-v4-flash",
+            extra_body={"thinking": {"type": "disabled"}},
             messages=[{"role": "user", "content": prompt}],
             temperature=0.7,
             max_tokens=1200,
@@ -543,7 +545,8 @@ JD 內容：
 
     try:
         resp = ai_client.chat.completions.create(
-            model="deepseek-chat",
+            model="deepseek-v4-flash",
+            extra_body={"thinking": {"type": "disabled"}},
             messages=[{"role": "user", "content": prompt}],
             temperature=0.7,
             max_tokens=1000,
@@ -585,7 +588,8 @@ JD：
 
     try:
         resp = ai_client.chat.completions.create(
-            model="deepseek-chat",
+            model="deepseek-v4-flash",
+            extra_body={"thinking": {"type": "disabled"}},
             messages=[{"role": "user", "content": prompt}],
             temperature=0.7,
             max_tokens=800,
@@ -627,7 +631,8 @@ def extract_job_from_url(url: str) -> dict:
 
     try:
         r = ai_client.chat.completions.create(
-            model="deepseek-chat",
+            model="deepseek-v4-flash",
+            extra_body={"thinking": {"type": "disabled"}},
             messages=[{"role": "user", "content": prompt}],
             temperature=0.1,
             max_tokens=600,
@@ -678,7 +683,8 @@ def extract_company_role(jd_text: str) -> dict:
 {jd_text[:2500]}"""
     try:
         r = ai_client.chat.completions.create(
-            model="deepseek-chat",
+            model="deepseek-v4-flash",
+            extra_body={"thinking": {"type": "disabled"}},
             messages=[{"role": "user", "content": prompt}],
             temperature=0.0,
             max_tokens=150,
@@ -719,7 +725,8 @@ def parse_resume(resume_text: str) -> dict:
 
     try:
         resp = ai_client.chat.completions.create(
-            model="deepseek-chat",
+            model="deepseek-v4-flash",
+            extra_body={"thinking": {"type": "disabled"}},
             messages=[{"role": "user", "content": prompt}],
             temperature=0.2,
             max_tokens=500,
@@ -769,7 +776,8 @@ REMEMBER: body ≤ 150 words. Count before you finish."""
 
     try:
         resp = ai_client.chat.completions.create(
-            model="deepseek-chat",
+            model="deepseek-v4-flash",
+            extra_body={"thinking": {"type": "disabled"}},
             messages=[{"role": "user", "content": prompt}],
             temperature=0.3,
             max_tokens=350,
@@ -837,7 +845,8 @@ Output ONLY valid JSON (no markdown, no code fences) with this EXACT structure:
 
     try:
         resp = ai_client.chat.completions.create(
-            model="deepseek-chat",
+            model="deepseek-v4-flash",
+            extra_body={"thinking": {"type": "disabled"}},
             messages=[{"role": "user", "content": prompt}],
             temperature=0.3,
             max_tokens=3000,
@@ -1197,7 +1206,8 @@ def generate_salary_benchmark(role: str, expected_salary: str, industry: str = "
 
     try:
         resp = ai_client.chat.completions.create(
-            model="deepseek-chat",
+            model="deepseek-v4-flash",
+            extra_body={"thinking": {"type": "disabled"}},
             messages=[{"role": "user", "content": prompt}],
             temperature=0.5,
             max_tokens=500,
@@ -1221,7 +1231,8 @@ JD:
 
     try:
         resp = ai_client.chat.completions.create(
-            model="deepseek-chat",
+            model="deepseek-v4-flash",
+            extra_body={"thinking": {"type": "disabled"}},
             messages=[{"role": "user", "content": prompt}],
             temperature=0.3,
             max_tokens=300,
@@ -1298,7 +1309,8 @@ Offer details：{offer_details}
 
     try:
         resp = ai_client.chat.completions.create(
-            model="deepseek-chat",
+            model="deepseek-v4-flash",
+            extra_body={"thinking": {"type": "disabled"}},
             messages=[{"role": "user", "content": prompt}],
             temperature=0.8,
             max_tokens=600,
@@ -1340,7 +1352,8 @@ def generate_negotiate_summary(history: list) -> str:
 
     try:
         resp = ai_client.chat.completions.create(
-            model="deepseek-chat",
+            model="deepseek-v4-flash",
+            extra_body={"thinking": {"type": "disabled"}},
             messages=[{"role": "user", "content": prompt}],
             temperature=0.6,
             max_tokens=600,
@@ -1376,7 +1389,8 @@ def generate_debrief(job_info: dict, debrief_text: str) -> str:
 
     try:
         resp = ai_client.chat.completions.create(
-            model="deepseek-chat",
+            model="deepseek-v4-flash",
+            extra_body={"thinking": {"type": "disabled"}},
             messages=[{"role": "user", "content": prompt}],
             temperature=0.6,
             max_tokens=900,

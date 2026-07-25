@@ -170,7 +170,8 @@ def _rank_and_extract_jobs(listings_text: str, profile: dict, seen: set) -> list
 唔要任何其他文字或 markdown code block。"""
     try:
         r = ai_client.chat.completions.create(
-            model="deepseek-chat",
+            model="deepseek-v4-flash",
+            extra_body={"thinking": {"type": "disabled"}},
             messages=[{"role": "user", "content": prompt}],
             temperature=0.3,
             max_tokens=1000,

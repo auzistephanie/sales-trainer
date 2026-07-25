@@ -2,6 +2,8 @@
 
 > 唔會自動讀入每次對話 context，需要時先 `read_file`。
 
+- **2026-07-25**：DeepSeek 官方 2026-07-24 停用舊 model 名 `deepseek-chat`/`deepseek-reasoner`（迎代 `deepseek-v4-flash`/`deepseek-v4-pro`）——`webapp/api/_lib/interview_trainer.py`（interview_trainer.py 嘅 mirror copy，14 處呼叫）同 `api/daily_check.py`（Daily Check 自動搵工 AI 排名）跟住換做 `model="deepseek-v4-flash"` + `extra_body={"thinking":{"type":"disabled"}}`（保持原本非thinking快速回覆行為，同 root `interview_trainer.py` 同日稍早已改嘅版本一致）。已用真 Mac + 真 API key 實測（curl 式 request：status=200、回覆內容正常、`reasoning_content` 為空確認 thinking 已關）。⚠️ 未做：純機械式 model 名替換，低風險，未逐個觸發 Telegram bot／webapp 完整對話流程。
+
 - **2026-07-18**（第二輪）：CLAUDE.md「三條保命規則」升格做完成前檢查 DoD（加實跑驗證＋push 核實 HEAD 兩條）。改前原版＝`.bak-20260718`。
 - **2026-07-18**：CLAUDE.md 重複規則段（寫入分流／Git push／AI 制度 router）換做 5 行「⚙️ Standards」block，正本 → `stephanie-personal/docs/ai-governance/06-STANDARDS.md`（skill 系統重整 session）；改前備份 `CLAUDE.md.bak-20260718`。
 - **2026-07-12**：搬機至 Google Drive Mirror——canonical 路徑由 `~/sales-trainer` 改為 `~/Desktop/Stephanie-Google Drive/dev/sales-trainer`；HEAD／`git fsck`／檔案數（3206 個）核對通過；`stephanie-personal/scripts/autopush-registry.txt` 已更新新路徑；舊 `~/sales-trainer` 已加 `_MIGRATED_TO_GOOGLE_DRIVE.txt` 標記，確認後可刪。
