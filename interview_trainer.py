@@ -1269,59 +1269,158 @@ def generate_salary_benchmark(role: str, expected_salary: str, industry: str = "
 
 # ── ATS Match Score ───────────────────────────────────────────────
 
-def calculate_ats_score(jd_text: str, cv_text: str) -> dict:
-    """抽取 JD 關鍵詞（DeepSeek），對比 CV 文本（本地比對），計算 ATS Match Score。"""
-    ai_client = OpenAI(api_key=DEEPSEEK_API_KEY, base_url="https://api.deepseek.com")
+_ATS_STOPWORDS = {"and", "or", "the", "a", "an", "of", "in", "for", "to",
+                  "with", "on", "at", "by", "as", "is", "are"}
 
-    prompt = f"""從以下 JD 抽出 15-20 個最重要嘅關鍵詞（skills, tools, qualifications, job-specific terms）。
-只輸出詞語清單，逗號分隔，唔加解釋。
+
+def _ats_stem(w: str) -> str:
+    """極簡詞根還原：只剪最常見詞尾，唔夠長就唔剪（避免誤傷）。"""
+    for suf in ("ings", "ing", "ies", "ied", "ed", "es", "s"):
+        if len(w) > len(suf) + 3 and w.endswith(suf):
+            base = w[:-len(suf)]
+            if suf in ("ies", "ied"):
+                base += "y"
+            return base
+    return w
+
+
+def _ats_tokens(text: str) -> set:
+    import re as _re_a
+    words = _re_a.findall(r"[a-zA-Z0-9一-鿿\+#\.]+", (text or "").lower())
+    out = set()
+    for w in words:
+        out.add(w)
+        out.add(_ats_stem(w))
+    return out
+
+
+def smart_match(keywords: list, text: str):
+    """比 `k in text` 聰明嘅比對：normalize + 詞根 + multi-word 部分分（≥70% 字命中當 match）。
+
+    2026-07-25 新增。純粹改善「量度」——唔會為咗夾分而改 CV 內容。
+    """
+    import re as _re_a
+    tokens = _ats_tokens(text)
+    low = (text or "").lower()
+    matched, missing = [], []
+    for kw in keywords:
+        k = (kw or "").strip()
+        if not k:
+            continue
+        if k.lower() in low:                      # 完全命中
+            matched.append(k)
+            continue
+        parts = [p for p in _re_a.findall(r"[a-zA-Z0-9一-鿿\+#\.]+", k.lower())
+                 if p not in _ATS_STOPWORDS]
+        if not parts:
+            missing.append(k)
+            continue
+        hit = sum(1 for p in parts if p in tokens or _ats_stem(p) in tokens)
+        (matched if hit / len(parts) >= 0.7 else missing).append(k)
+    return matched, missing
+
+
+def flatten_cv_data(cv_data: dict) -> str:
+    """將 generate_tailored_cv_content() 個 dict 攤平成純文字，供 ATS 比對用。
+
+    2026-07-25 新增。之前 ATS 一直攞原版 CV 去計分，tailored 結果從來冇入過公式，
+    所以個分永遠唔郁（12/100 成因）。
+    """
+    if not isinstance(cv_data, dict):
+        return str(cv_data or "")
+    parts = [cv_data.get("name", ""), cv_data.get("contact", ""), cv_data.get("summary", "")]
+    parts += list(cv_data.get("core_competencies") or [])
+    for job in (cv_data.get("experience") or []):
+        if isinstance(job, dict):
+            parts += [job.get("title", ""), job.get("company", ""), job.get("period", "")]
+            parts += list(job.get("bullets") or [])
+        else:
+            parts.append(str(job))
+    parts += list(cv_data.get("earlier_experience") or [])
+    for ed in (cv_data.get("education") or []):
+        if isinstance(ed, dict):
+            parts += [ed.get("degree", ""), ed.get("institution", ""), ed.get("period", "")]
+        else:
+            parts.append(str(ed))
+    parts += list(cv_data.get("certifications") or [])
+    parts += [cv_data.get("languages", ""), cv_data.get("salary", "")]
+    return "\n".join(str(p) for p in parts if p)
+
+
+def calculate_ats_score(jd_text: str, cv_text: str, keywords: list = None) -> dict:
+    """抽取 JD 關鍵詞（DeepSeek），對比 CV 文本（本地 smart_match），計算 ATS Match Score。
+
+    keywords: 傳入已抽好嘅 keyword list 就唔會再叫 API —— 用嚟同一組 keyword
+              分別計「原版 CV」同「tailored CV」，兩個分先可比。
+    """
+    if keywords is None:
+        ai_client = OpenAI(api_key=DEEPSEEK_API_KEY, base_url="https://api.deepseek.com")
+
+        prompt = f"""Extract the 15-20 most important keywords from this job description
+(skills, tools, qualifications, job-specific terms).
+
+RULES:
+- Output in ENGLISH only, exactly as written in the JD. Do NOT translate.
+- Output a comma-separated list only. No explanation, no numbering, no markdown.
 
 JD:
 {(jd_text or "")[:2500]}"""
 
-    try:
-        resp = ai_client.chat.completions.create(
-            model="deepseek-v4-flash",
-            extra_body={"thinking": {"type": "disabled"}},
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.3,
-            max_tokens=300,
-        )
-        raw = resp.choices[0].message.content
-    except Exception as e:
-        return {"score": 0, "matched": [], "missing": [], "improvement": f"⚠️ 抽取關鍵詞失敗：{e}"}
+        try:
+            resp = ai_client.chat.completions.create(
+                model="deepseek-v4-flash",
+                extra_body={"thinking": {"type": "disabled"}},
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.3,
+                max_tokens=300,
+            )
+            raw = resp.choices[0].message.content
+        except Exception as e:
+            return {"score": 0, "matched": [], "missing": [], "keywords": [],
+                    "improvement": f"⚠️ 抽取關鍵詞失敗：{e}"}
+    else:
+        raw = ",".join(keywords)
 
     keywords = [k.strip() for k in raw.replace("\n", ",").split(",") if k.strip()]
-    cv_lower = (cv_text or "").lower()
-
-    matched = [k for k in keywords if k.lower() in cv_lower]
-    missing = [k for k in keywords if k not in matched]
+    matched, missing = smart_match(keywords, cv_text or "")
     score = round(len(matched) / len(keywords) * 100) if keywords else 0
 
     if missing:
-        improvement = f"建議喺 CV 加入：{', '.join(missing[:3])}"
+        improvement = (f"JD 要求但你 CV 真係未有：{', '.join(missing[:5])}。"
+                       "如果你實際有呢啲經驗，話我知我幫你加返；冇嘅話唔會幫你作。")
     else:
-        improvement = "CV 已涵蓋大部分關鍵詞！"
+        improvement = "CV 已涵蓋 JD 所有關鍵詞！"
 
-    return {"score": score, "matched": matched, "missing": missing, "improvement": improvement}
+    return {"score": score, "matched": matched, "missing": missing,
+            "keywords": keywords, "improvement": improvement}
 
 
-def format_ats_message(ats: dict, cv_health_score: int = None) -> str:
-    """將 calculate_ats_score() 嘅 dict 結果砌成 Telegram 訊息，附帶對比 CV Health baseline 嘅 delta。"""
+def format_ats_message(ats: dict, baseline_score: int = None) -> str:
+    """將 calculate_ats_score() 嘅 dict 結果砌成 Telegram 訊息。
+
+    baseline_score：同一組 keyword 計出嚟嘅「原版 CV」分數（唔係 CV Health）。
+    2026-07-25 修正：舊版攞 cv_health_score 嚟減，兩個係完全唔同嘅指標（雞同鴨比），
+    所以成日錯誤顯示「需改善 ⚠️」。
+    """
     score = ats.get("score", 0)
-    delta_text = ""
-    if cv_health_score is not None:
-        delta = score - cv_health_score
-        delta_text = f"（比你原本 CV 高 +{delta} 分 ✅）" if delta > 0 else "（需改善 ⚠️）"
-
     matched = ats.get("matched", [])
     missing = ats.get("missing", [])
+    total = len(ats.get("keywords", [])) or (len(matched) + len(missing))
 
-    lines = [f"📊 ATS Match Score：{score}/100{delta_text}", ""]
+    lines = [f"📊 ATS Match Score：{score}/100"]
+    if baseline_score is not None:
+        delta = score - baseline_score
+        if delta > 0:
+            lines.append(f"　　原版 CV：{baseline_score}/100 → Tailored +{delta} 分 ✅")
+        elif delta == 0:
+            lines.append(f"　　原版 CV：{baseline_score}/100 → 持平")
+        else:
+            lines.append(f"　　原版 CV：{baseline_score}/100 → 低咗 {abs(delta)} 分 ⚠️")
+    lines.append("")
     if matched:
-        lines.append(f"✅ 匹配關鍵詞（{len(matched)} 個）：{', '.join(matched)}")
-    if len(missing) >= 3:
-        lines.append(f"⚠️ 缺漏關鍵詞：{', '.join(missing)}")
+        lines.append(f"✅ 匹配關鍵詞（{len(matched)}/{total}）：{', '.join(matched)}")
+    if missing:
+        lines.append(f"⚠️ JD 要求但你 CV 未有（{len(missing)} 個）：{', '.join(missing)}")
     lines.append("")
     if ats.get("improvement"):
         lines.append(f"💡 {ats['improvement']}")

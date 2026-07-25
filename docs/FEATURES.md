@@ -54,9 +54,12 @@
 - Onboarding 流程：CV upload / 手動輸入職位 → 問月薪期望（`parse_salary_input()` 解析 "38k"/"$38,000" 等格式）→ 顯示市場薪酬參考 → 入 MBTI 步
 - 結果存 `profile["expected_salary"]` + `profile["salary_currency"]`（固定 "HKD"）
 
-**ATS Match Score**（`calculate_ats_score(jd_text, cv_text)`，DeepSeek 抽 keyword + 本地比對）
+**ATS Match Score**（`calculate_ats_score(jd_text, cv_text, keywords=None)`，DeepSeek 抽 keyword + 本地 `smart_match()`）
 - Tailored CV 生成完之後自動觸發（`handle_job_tailored_cv` / `handle_jd_tailored_cv` / `_auto_add_job_from_url`）
-- `format_ats_message(ats, cv_health_score)` 計 delta（同 onboarding 嘅 cv_health_score 比較）
+- **計分對象＝tailored CV**：先 `flatten_cv_data(cv_data)` 攤平成純文字先計。（2026-07-25 前錯用原版 CV，見 CHANGELOG）
+- **雙分數**：同一組 keyword 分別計 tailored（`ats`）同原版 CV（`base`，靠 `keywords=` 參數重用，唔會多叫一次 API）；`format_ats_message(ats, baseline_score)` 嘅 delta 係 tailored − 原版，**唔再同 `cv_health_score` 比**（兩者係唔同指標）
+- `smart_match()`：完全命中 → 否則 normalize + `_ats_stem()` 詞根 + multi-word ≥70% token 命中當 match。**只改「點樣量」，唔會為谷分而改 CV 內容**
+- 存 `job["ats_score"]` + `job["ats_baseline"]`（JD session 同樣）
 
 **薪酬談判 Negotiate**（`/negotiate`）
 - State：`negotiate_start`（等 offer details）→ `negotiate_session`（每回合 `generate_negotiate_response()` 生成 HR 回應 + 評分）
