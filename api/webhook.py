@@ -792,13 +792,53 @@ def fetch_jd_via_jina(url: str) -> str:
     return ""
 
 
+def fetch_jd_via_firecrawl(url: str) -> str:
+    """用 Firecrawl（stealth proxy）抓 JD —— Jina 抓唔到 / 被擋時嘅 fallback。
+
+    2026-07-25 新增：JobsDB 部分頁面 Jina 都過唔到 Cloudflare，
+    Firecrawl 嘅 stealth proxy 頂到。需要 FIRECRAWL_API_KEY，冇 key 就跳過。
+    """
+    api_key = os.environ.get("FIRECRAWL_API_KEY", "").strip()
+    if not api_key:
+        return ""
+    try:
+        resp = req.post(
+            "https://api.firecrawl.dev/v2/scrape",
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "url": url,
+                "formats": ["markdown"],
+                "onlyMainContent": True,
+                "proxy": "stealth",
+            },
+            timeout=45,
+        )
+        if resp.ok:
+            data = resp.json().get("data", {}) or {}
+            md = (data.get("markdown") or "").strip()
+            if len(md) > 200:
+                return md[:4000]
+            print(f"[firecrawl fetch] len={len(md)} too short")
+        else:
+            print(f"[firecrawl fetch] status={resp.status_code} body={resp.text[:300]}")
+    except Exception as e:
+        print(f"[firecrawl fetch] {e}")
+    return ""
+
+
 def handle_url_message(url: str):
     """用戶發咗一條 URL — 嘗試抓 JD，然後問佢要做咩。"""
     send_telegram("🔍 抓取職位資料中⋯⋯")
     jd_text = fetch_jd_via_jina(url)
+    if not jd_text:
+        # Jina 抓唔到 → 試 Firecrawl stealth proxy
+        jd_text = fetch_jd_via_firecrawl(url)
 
     if not jd_text:
-        # Jina 抓唔到，叫用戶貼文字
+        # 兩個都抓唔到，叫用戶貼文字
         save_jd_session({"state": "waiting_jd_text", "url": url})
         send_telegram(
             "⚠️ 未能自動抓取內容（可能係需要登入）\n\n"
@@ -807,13 +847,23 @@ def handle_url_message(url: str):
         )
         return
 
-    # 成功抓到 → 清走 Jina boilerplate，再用 DeepSeek 乾淨抽 company/role
+    # 成功抓到 → 清走 boilerplate，再用 DeepSeek 乾淨抽 company/role
     jd_text = clean_jd_text(jd_text)
     info = extract_company_role(jd_text)
     company_guess = info.get("company", "")
     role_guess    = info.get("role", "")
 
-    # 抽唔到 company 同 role（例如被擋、內容係雜訊）→ 當抓唔到，叫貼 JD
+    # 抽唔到 company 同 role（例如被擋、內容係雜訊）→ 試多次 Firecrawl（如果啱啱用緊 Jina 個結果）先，都抽唔到先叫貼 JD
+    if not company_guess and not role_guess:
+        jd_text_fc = fetch_jd_via_firecrawl(url)
+        if jd_text_fc:
+            jd_text_fc = clean_jd_text(jd_text_fc)
+            info_fc = extract_company_role(jd_text_fc)
+            if info_fc.get("company") or info_fc.get("role"):
+                jd_text = jd_text_fc
+                company_guess = info_fc.get("company", "")
+                role_guess    = info_fc.get("role", "")
+
     if not company_guess and not role_guess:
         save_jd_session({"state": "waiting_jd_text", "url": url})
         send_telegram(
