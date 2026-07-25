@@ -2,6 +2,8 @@
 
 > 唔會自動讀入每次對話 context，需要時先 `read_file`。
 
+- **2026-07-25**：**散喺 repo 嘅 `.bak-*` 備份推咗上 GitHub → 搬入 `_to_delete/`**——本 repo `.gitignore` 已經有 `_to_delete/`，但備份檔冇搬入去、留咗喺原位，所以 `github_push.py` 照當普通檔上傳；GitHub Git Trees API 核實 remote `main` 實際有：`CLAUDE.md.bak-20260718`（repo 根）。修法：`mv` 入 `_to_delete/`（跟全局規則「清理一律 mv 去該 project 根目錄 `_to_delete/`」），push 後 `github_push.py` 嘅 `deletions` 邏輯自動由 remote 樹刪走，14 日後由 `stephanie-personal/scripts/clean_to_delete.sh` 真刪。背景：同日先修咗 6 個 repo `.gitignore` 漏咗 `_to_delete/`，跟手全 repo 掃多次，發現呢批係另一種漏法——**回收筒 ignore 咗，但檔案根本冇入過回收筒**。⚠️ 只由 HEAD 移除，舊 commit 歷史仍然有；已 grep 過冇 token／secret 值。
+
 - **2026-07-25**：DeepSeek 官方 2026-07-24 停用舊 model 名 `deepseek-chat`/`deepseek-reasoner`（迎代 `deepseek-v4-flash`/`deepseek-v4-pro`）——`webapp/api/_lib/interview_trainer.py`（interview_trainer.py 嘅 mirror copy，14 處呼叫）同 `api/daily_check.py`（Daily Check 自動搵工 AI 排名）跟住換做 `model="deepseek-v4-flash"` + `extra_body={"thinking":{"type":"disabled"}}`（保持原本非thinking快速回覆行為，同 root `interview_trainer.py` 同日稍早已改嘅版本一致）。已用真 Mac + 真 API key 實測（curl 式 request：status=200、回覆內容正常、`reasoning_content` 為空確認 thinking 已關）。⚠️ 未做：純機械式 model 名替換，低風險，未逐個觸發 Telegram bot／webapp 完整對話流程。 順手同步更新 `CLAUDE.md`＋`docs/APP_SPEC.md` 入面舊嘅「DeepSeek-V3」文字描述，改做 `DeepSeek（deepseek-v4-flash）`，同代碼一致。
 
 - **2026-07-18**（第二輪）：CLAUDE.md「三條保命規則」升格做完成前檢查 DoD（加實跑驗證＋push 核實 HEAD 兩條）。改前原版＝`.bak-20260718`。
