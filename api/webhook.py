@@ -18,6 +18,7 @@ from interview_trainer import (
     get_daily_tip, parse_resume,
     generate_job_questions, generate_job_tips,
     generate_cover_letter_from_jd, generate_tailored_cv_content, build_cv_docx,
+    build_cover_letter_docx,
     clean_jd_text, extract_company_role,
     calculate_cv_health, format_cv_health_message,
     generate_salary_benchmark, parse_salary_input,
@@ -675,6 +676,18 @@ def handle_job_cover_letter(job_id: str):
             {"text": "🔄 重新生成",          "callback_data": f"job_cl_{job_id}"},
         ]]}
     )
+    try:
+        docx_bytes = build_cover_letter_docx(result, job["company"], job["role"])
+        filename   = f"CoverLetter_{job['company'].replace(' ','_')[:20]}_{job['role'].replace(' ','_')[:15]}.docx"
+        drive_link = upload_to_drive(docx_bytes, filename)
+        if drive_link:
+            send_telegram(f"✅ Cover Letter 已上傳 Google Drive！\n[🔗 打開 Cover Letter]({drive_link})")
+            job["cl_drive_link"] = drive_link
+            save_jobs(jobs)
+        else:
+            send_document(docx_bytes, filename, caption=f"📄 Cover Letter — {job['role']} @ {job['company']}")
+    except Exception as e:
+        send_telegram(f"⚠️ Cover Letter .docx 上傳失敗：{e}")
 
 
 def handle_job_tailored_cv(job_id: str):
@@ -926,6 +939,20 @@ def handle_jd_cover_letter():
             [{"text": "🔄 重新生成",            "callback_data": "jd_cover_letter"}],
         ]}
     )
+    try:
+        company = sess.get("company", "")
+        role    = sess.get("role", "")
+        docx_bytes = build_cover_letter_docx(result, company, role)
+        filename   = f"CoverLetter_{company.replace(' ','_')[:20]}.docx"
+        drive_link = upload_to_drive(docx_bytes, filename)
+        if drive_link:
+            send_telegram(f"✅ Cover Letter 已上傳 Google Drive！\n[🔗 打開 Cover Letter]({drive_link})")
+            sess["cl_drive_link"] = drive_link
+            save_jd_session(sess)
+        else:
+            send_document(docx_bytes, filename, caption=f"📄 Cover Letter — {role} @ {company}")
+    except Exception as e:
+        send_telegram(f"⚠️ Cover Letter .docx 上傳失敗：{e}")
 
 
 def handle_jd_tailored_cv():

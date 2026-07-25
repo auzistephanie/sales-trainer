@@ -1064,6 +1064,56 @@ def build_cv_docx(cv_data: dict, company: str, role: str) -> bytes:
     return buf.getvalue()
 
 
+def build_cover_letter_docx(letter_text: str, company: str, role: str, applicant_name: str = "") -> bytes:
+    """將 Cover Letter 文字轉成 .docx bytes（簡潔商業信格式，2026-07-25 新增）。"""
+    from docx import Document
+    from docx.shared import Pt, RGBColor, Inches
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+    import io
+    import re as _re_cl
+    from datetime import date
+
+    NAVY = RGBColor(0x1C, 0x35, 0x57)
+    DARK = RGBColor(0x44, 0x44, 0x44)
+
+    doc = Document()
+    for section in doc.sections:
+        section.top_margin    = Inches(1)
+        section.bottom_margin = Inches(1)
+        section.left_margin   = Inches(1)
+        section.right_margin  = Inches(1)
+
+    if applicant_name:
+        np = doc.add_paragraph()
+        nr = np.add_run(applicant_name.upper())
+        nr.bold = True; nr.font.size = Pt(14); nr.font.color.rgb = NAVY
+        np.paragraph_format.space_after = Pt(8)
+
+    dp = doc.add_paragraph()
+    dr = dp.add_run(date.today().strftime("%d %B %Y"))
+    dr.font.size = Pt(10); dr.font.color.rgb = DARK
+    dp.paragraph_format.space_after = Pt(10)
+
+    rp = doc.add_paragraph()
+    rr = rp.add_run(f"Re: Application for {role} at {company}")
+    rr.bold = True; rr.font.size = Pt(11); rr.font.color.rgb = NAVY
+    rp.paragraph_format.space_after = Pt(10)
+
+    text = (letter_text or "").strip()
+    paras = [p.strip() for p in _re_cl.split(r'\n\s*\n', text) if p.strip()]
+    if len(paras) <= 1:
+        paras = [p.strip() for p in text.split('\n') if p.strip()]
+    for para in paras:
+        p = doc.add_paragraph()
+        p.paragraph_format.space_after = Pt(8)
+        run = p.add_run(para)
+        run.font.size = Pt(11)
+
+    buf = io.BytesIO()
+    doc.save(buf)
+    return buf.getvalue()
+
+
 # ── CV Health Score（本地計算，唔需要 AI）──────────────────────────
 
 CV_ACTION_VERBS = [

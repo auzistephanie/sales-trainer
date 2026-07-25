@@ -1,6 +1,6 @@
 # CLAUDE.md — AI 面試教練 Bot
 
-AI 生成面試場景，評估回答，追蹤進度，MBTI 個人化 coaching。DeepSeek-V3 生成，Upstash Redis 持久化，Telegram Bot 互動。
+AI 生成面試場景，評估回答，追蹤進度，MBTI 個人化 coaching。DeepSeek（deepseek-v4-flash）生成，Upstash Redis 持久化，Telegram Bot 互動。
 
 > 詳細資訊拆咗落 `docs/*.md`，按需 read_file，唔好靠記憶或猜測。
 

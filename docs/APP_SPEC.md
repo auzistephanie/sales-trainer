@@ -21,7 +21,7 @@
 | 登入 | Supabase Auth — Google only | 前端拎 JWT，帶去 API |
 | API | Vercel Python serverless `/api/app/*` | 每個 endpoint 包一個現有函數，驗 Supabase JWT |
 | 資料 | Supabase Postgres + RLS | 每行 `user_id = auth.uid()` |
-| AI | DeepSeek-V3（不變） | `interview_trainer.py` import 即用 |
+| AI | DeepSeek（deepseek-v4-flash，2026-07-25 由已停用嘅 deepseek-chat 換） | `interview_trainer.py` import 即用 |
 
 ---
 
