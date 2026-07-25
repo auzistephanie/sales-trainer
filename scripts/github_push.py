@@ -2,15 +2,24 @@
 """
 github_push.py — 直接經 GitHub API 把整個 working tree 同步上 GitHub main。
 
-點解唔用 git CLI：
+點解唔用 git CLI 做 push：
   Sandbox 跑 `git add/commit/push` 會留低 stale `.git/index.lock` /
-  `HEAD.lock`，之後所有 commit 都被擋。呢個 script 完全繞過 git CLI，
+  `HEAD.lock`，之後所有 commit 都被擋。呢個 script 完全繞過 git CLI 做 push，
   用 GitHub Git Data API（blobs / trees / commits / refs）直接寫上 GitHub。
 
 偵測方式（重要）：
   同 **遠端 origin/main 的實際 tree** 比對，而唔係本地 HEAD——
   計每個工作檔的 git blob sha，只上傳有差異的檔，並刪除遠端多出的檔。
   所以就算本地 git 歷史舊咗/未同步，一樣會正確同步，且可重複執行（idempotent）。
+
+⚠️ 本地 `git status`／`git log` 唔會再反映 push 狀態（2026-07-15 起，故意）：
+  之前試過 push 完順手 `git fetch`＋`git reset --mixed` 令本地 HEAD 對齊 remote，
+  淨係為咗令 `git status` 睇落乾淨。但 .git 住喺 Google Drive streaming 資料夾，
+  呢兩個 git 指令成日撞到 stale ref lock（`refs/heads/main.lock` 等），一卡就係
+  幾廿個鐘，令人誤以為「push 唔到」（其實 GitHub 早已同步咗，淨係本地顯示舊）。
+  已拍板：寧願本地 status 唔準，都要 push 呢條路徑本身零依賴 git 寫入操作。
+  想知道真正有冇 push 咗 → 睇 autopush.log 尾行（"✅ Pushed" / "Nothing to push"）
+  或者直接開 GitHub 網頁睇 commit 時間，唔好信呢批 repo 嘅本地 git status。
 
 用法：
   python3 scripts/github_push.py "你的 commit message"
@@ -39,6 +48,34 @@ except ImportError:
 API = "https://api.github.com"
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
+# --- 2026-07-15 concurrent-push 事後可見警報（overlap 診斷 fix A，見
+#     stephanie-personal CHANGELOG 2026-07-15）。Fail-silent，唔影響push行為，
+#     remote永遠贏，本地照常上——純粹畀你事後喺log見到「可能撞咗」。 ---
+_PUSH_STATE_DIR = os.path.join(os.path.dirname(REPO), "stephanie-personal", "scripts", ".push-state")
+_PUSH_STATE_FILE = os.path.join(_PUSH_STATE_DIR, os.path.basename(REPO) + ".json")
+
+
+def _check_concurrent_push(base_sha):
+    try:
+        if not os.path.isfile(_PUSH_STATE_FILE):
+            return
+        last = json.load(open(_PUSH_STATE_FILE))
+        last_sha = last.get("last_seen_sha")
+        if last_sha and last_sha != base_sha:
+            print(f"⚠️ CONCURRENT-PUSH-DETECTED：remote SHA喺上個cycle之後變咗（{last_sha[:7]}→{base_sha[:7]}），可能有第二部機/session推過嘢")
+    except Exception:
+        pass
+
+
+def _record_seen_sha(sha):
+    try:
+        os.makedirs(_PUSH_STATE_DIR, exist_ok=True)
+        with open(_PUSH_STATE_FILE, "w") as f:
+            json.dump({"last_seen_sha": sha}, f)
+    except Exception:
+        pass
+
+
 if load_dotenv:
     load_dotenv(os.path.join(REPO, ".env"))
 
@@ -46,6 +83,8 @@ if load_dotenv:
 def run(args):
     # -c core.quotepath=false：非 ASCII（中文）檔名唔好被 octal-escape 做 "\344\275..."，
     # 否則落面 path 攞到嘅係字面 backslash-digit 文字，open() 揾唔到個真檔案。
+    # 呢個 script 淨係用 git 做 read-only 操作（config get / ls-files）——唔會再
+    # 寫任何 .git ref/HEAD/index，所以唔會再產生 stale lock。
     return subprocess.run(["git", "-c", "core.quotepath=false"] + args[1:],
                            cwd=REPO, capture_output=True, text=True)
 
@@ -85,7 +124,7 @@ def get_token(remote_token):
     return remote_token  # legacy fallback only — embedding tokens in remote URL is discouraged
 
 
-def api(method, path, token, body=None, ok_statuses=()):
+def api(method, path, token, body=None):
     url = path if path.startswith("http") else API + path
     data = json.dumps(body).encode() if body is not None else None
     req = urllib.request.Request(url, data=data, method=method)
@@ -93,12 +132,15 @@ def api(method, path, token, body=None, ok_statuses=()):
     req.add_header("Accept", "application/vnd.github+json")
     req.add_header("User-Agent", "github-push-script")
     try:
-        with urllib.request.urlopen(req) as resp:
+        # timeout=20（2026-07-16 加）：冇呢個 urlopen 會無限等，網絡一卡就永久
+        # 卡死呢個 process（連帶拖死 auto_push.sh 個 daemon loop）。20s 後放棄
+        # 呢個 request，畀外層 auto_push.sh 嘅 `timeout 60` 做埋雙保險。
+        with urllib.request.urlopen(req, timeout=20) as resp:
             return json.loads(resp.read().decode())
     except urllib.error.HTTPError as e:
-        if e.code in ok_statuses:
-            return None  # caller handles this expected case (e.g. brand-new empty repo)
         raise SystemExit(f"❌ GitHub API {method} {path} -> {e.code}\n{e.read().decode()}")
+    except (urllib.error.URLError, TimeoutError) as e:
+        raise SystemExit(f"❌ GitHub API {method} {path} -> 網絡/timeout: {e}")
 
 
 def git_blob_sha(data: bytes) -> str:
@@ -125,24 +167,6 @@ def remote_tree_map(base, tree_sha, token):
     return {e["path"]: e["sha"] for e in data.get("tree", []) if e["type"] == "blob"}
 
 
-def sync_local_head(commit_sha, owner, repo, token):
-    """Push 成功後，fast-forward 本地 main 到啱 push 嘅 commit，
-    令 git status 唔再顯示假改動（本 script 經 GitHub API 寫入、唔會 advance 本地 HEAD）。
-    token 只用喺 fetch URL、唔寫入任何檔、唔 print；任何一步失敗都唔阻塞
-    （已 push 上 GitHub 嘅內容唔受影響）。用 --mixed：只郁 HEAD+index，唔掂 working tree。"""
-    auth_url = f"https://{token}@github.com/{owner}/{repo}.git"
-    if run(["git", "fetch", auth_url, "main"]).returncode != 0:
-        print("   (本地 HEAD 未同步：fetch 失敗，唔影響已 push 內容)")
-        return
-    # 順手更新 refs/remotes/origin/main，等 `git status` 嘅 ahead/behind 都準——
-    # 唔係淨係 HEAD 啱咗但 tracking ref 舊咗，繼續呃人話「ahead N」。
-    run(["git", "update-ref", "refs/remotes/origin/main", commit_sha])
-    if run(["git", "reset", "--mixed", commit_sha]).returncode == 0:
-        print("   本地 HEAD 已對齊 remote — git status 現時乾淨 ✨")
-    else:
-        print("   (本地 HEAD reset 失敗，唔影響已 push 內容)")
-
-
 def main():
     if len(sys.argv) < 2 or not sys.argv[1].strip():
         raise SystemExit('用法：python3 scripts/github_push.py "commit message"')
@@ -156,16 +180,11 @@ def main():
         raise SystemExit("❌ 揾唔到 GitHub token（.env GITHUB_TOKEN / 環境變數 / .gh-token）")
 
     base = f"/repos/{owner}/{repo}/git"
-    # 404 = branch doesn't exist yet; 409 "Git Repository is empty." = brand-new repo,
-    # zero commits — GitHub returns either depending on repo state. Both mean: bootstrap.
-    ref = api("GET", f"{base}/ref/heads/main", token, ok_statuses=(404, 409))
-    is_empty_repo = ref is None
-    if is_empty_repo:
-        base_sha, base_tree, remote = None, None, {}
-    else:
-        base_sha = ref["object"]["sha"]
-        base_tree = api("GET", f"{base}/commits/{base_sha}", token)["tree"]["sha"]
-        remote = remote_tree_map(base, base_tree, token)
+    ref = api("GET", f"{base}/ref/heads/main", token)
+    base_sha = ref["object"]["sha"]
+    _check_concurrent_push(base_sha)
+    base_tree = api("GET", f"{base}/commits/{base_sha}", token)["tree"]["sha"]
+    remote = remote_tree_map(base, base_tree, token)
 
     local = working_files()
     local_set = set(local)
@@ -188,32 +207,19 @@ def main():
         tree.append({"path": path, "mode": "100644", "type": "blob", "sha": None})
 
     if not tree:
-        if is_empty_repo:
-            print("Nothing to push — 冇任何檔案（空 repo 亦冇本地檔案可以 bootstrap）。")
-            return
         print("Nothing to push — 遠端已同步。")
-        sync_local_head(base_sha, owner, repo, token)
+        _record_seen_sha(base_sha)
         return
 
-    tree_body = {"tree": tree}
-    if base_tree:
-        tree_body["base_tree"] = base_tree
-    new_tree = api("POST", f"{base}/trees", token, tree_body)
+    new_tree = api("POST", f"{base}/trees", token, {"base_tree": base_tree, "tree": tree})
+    commit = api("POST", f"{base}/commits", token, {
+        "message": message, "tree": new_tree["sha"], "parents": [base_sha],
+    })
+    api("PATCH", f"{base}/refs/heads/main", token, {"sha": commit["sha"]})
 
-    commit_body = {"message": message, "tree": new_tree["sha"]}
-    if base_sha:
-        commit_body["parents"] = [base_sha]
-    commit = api("POST", f"{base}/commits", token, commit_body)
-
-    if is_empty_repo:
-        # Repo has no refs at all yet — create refs/heads/main instead of PATCHing it.
-        api("POST", f"{base}/refs", token, {"ref": "refs/heads/main", "sha": commit["sha"]})
-    else:
-        api("PATCH", f"{base}/refs/heads/main", token, {"sha": commit["sha"]})
-
-    print(f"✅ Pushed to GitHub — {message}" + (" (首次 bootstrap)" if is_empty_repo else ""))
+    _record_seen_sha(commit["sha"])
+    print(f"✅ Pushed to GitHub — {message}")
     print(f"   {uploaded} 更新 / {len(deletions)} 刪除 · commit {commit['sha'][:7]}")
-    sync_local_head(commit["sha"], owner, repo, token)
 
 
 if __name__ == "__main__":
