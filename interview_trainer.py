@@ -1273,15 +1273,29 @@ _ATS_STOPWORDS = {"and", "or", "the", "a", "an", "of", "in", "for", "to",
                   "with", "on", "at", "by", "as", "is", "are"}
 
 
+_ATS_SUFFIXES = ("ions", "ion", "ments", "ment", "ings", "ing", "ies", "ied", "ed", "es", "s")
+
+
 def _ats_stem(w: str) -> str:
-    """極簡詞根還原：只剪最常見詞尾，唔夠長就唔剪（避免誤傷）。"""
-    for suf in ("ings", "ing", "ies", "ied", "ed", "es", "s"):
-        if len(w) > len(suf) + 3 and w.endswith(suf):
-            base = w[:-len(suf)]
-            if suf in ("ies", "ied"):
-                base += "y"
-            return base
-    return w
+    """極簡詞根還原：剪最常見詞尾（最多兩層）+ 去尾 e，唔夠長就唔剪（避免誤傷）。
+
+    2026-07-25 加強：舊版 coordinate → "coordinate"、coordinated → "coordinat"，
+    兩者對唔上。而家 coordinate / coordinated / coordinating / coordination
+    全部歸一做 "coordinat"；management / managing 歸一做 "manag"。
+    """
+    base = w
+    for _ in range(2):                       # 兩層：businesses → business → busines
+        for suf in _ATS_SUFFIXES:
+            if len(base) > len(suf) + 3 and base.endswith(suf):
+                base = base[:-len(suf)]
+                if suf in ("ies", "ied"):
+                    base += "y"
+                break
+        else:
+            break
+    if len(base) > 4 and base.endswith("e"):  # coordinate → coordinat
+        base = base[:-1]
+    return base
 
 
 def _ats_tokens(text: str) -> set:
@@ -1310,8 +1324,10 @@ def smart_match(keywords: list, text: str):
         if k.lower() in low:                      # 完全命中
             matched.append(k)
             continue
+        # len>1：撇除 apostrophe 拆出嚟嘅單字母（Bachelor's → bachelor / s / degree，
+        # 嗰個 "s" 會無端端拉低命中比例）
         parts = [p for p in _re_a.findall(r"[a-zA-Z0-9一-鿿\+#\.]+", k.lower())
-                 if p not in _ATS_STOPWORDS]
+                 if p not in _ATS_STOPWORDS and len(p) > 1]
         if not parts:
             missing.append(k)
             continue
@@ -1356,8 +1372,18 @@ def calculate_ats_score(jd_text: str, cv_text: str, keywords: list = None) -> di
     if keywords is None:
         ai_client = OpenAI(api_key=DEEPSEEK_API_KEY, base_url="https://api.deepseek.com")
 
-        prompt = f"""Extract the 15-20 most important keywords from this job description
-(skills, tools, qualifications, job-specific terms).
+        prompt = f"""Extract the 15-20 most important ATS keywords from this job description.
+
+INCLUDE ONLY things a CV could legitimately contain:
+- hard skills, tools, software, systems, methodologies
+- qualifications, certifications, degrees/fields of study
+- domain/industry terms and core job functions
+
+EXCLUDE (these are administrative posting details, NOT CV keywords — never output them):
+- programme / project / product brand names unique to this employer (e.g. "EngSeeds Programme")
+- contract length, employment type, work pattern (e.g. "1-year contract", "5-Day Work", "shift")
+- company name, location, district, salary, benefits, working hours
+- generic filler ("good communication", "team player", "detail-oriented")
 
 RULES:
 - Output in ENGLISH only, exactly as written in the JD. Do NOT translate.
@@ -1385,9 +1411,10 @@ JD:
     matched, missing = smart_match(keywords, cv_text or "")
     score = round(len(matched) / len(keywords) * 100) if keywords else 0
 
+    # 2026-07-25：唔再喺呢度重複列一次 missing —— format_ats_message 上面
+    # 已經有「⚠️ JD 要求但你 CV 未有」完整清單，列兩次係冗餘。
     if missing:
-        improvement = (f"JD 要求但你 CV 真係未有：{', '.join(missing[:5])}。"
-                       "如果你實際有呢啲經驗，話我知我幫你加返；冇嘅話唔會幫你作。")
+        improvement = "上面呢啲如果你實際有經驗，話我知我幫你加返；冇嘅話唔會幫你作。"
     else:
         improvement = "CV 已涵蓋 JD 所有關鍵詞！"
 
