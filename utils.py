@@ -129,32 +129,44 @@ def _split_text(text: str, max_len: int = 4000) -> list:
     return chunks
 
 def upload_to_drive(file_bytes: bytes, filename: str) -> str:
-    """Upload .docx to Google Drive, return shareable link. Returns '' on failure."""
-    import json as _j2, io as _io2
-    creds_raw = os.getenv("GOOGLE_CREDENTIALS", "")
-    folder_id = os.getenv("GOOGLE_DRIVE_FOLDER_ID", "")
-    if not creds_raw or not folder_id:
-        print("upload_to_drive: missing GOOGLE_CREDENTIALS or GOOGLE_DRIVE_FOLDER_ID")
+    """Upload .docx to Google Drive, return shareable link. Returns '' on failure.
+
+    2026-07-25 改用 OAuth user credential（唔再用 service account）——
+    Service Account 喺個人 Gmail（非 Workspace）冇儲存 quota，上傳一律
+    403 storageQuotaExceeded。而家用 refresh token 以 auzistephanie@gmail.com
+    本人身份上傳，檔案正式屬於佢個人 Drive，有 quota。
+    """
+    import io as _io2
+    client_id     = os.getenv("GOOGLE_OAUTH_CLIENT_ID", "")
+    client_secret = os.getenv("GOOGLE_OAUTH_CLIENT_SECRET", "")
+    refresh_token = os.getenv("GOOGLE_OAUTH_REFRESH_TOKEN", "")
+    folder_id     = os.getenv("GOOGLE_DRIVE_FOLDER_ID", "")
+    if not (client_id and client_secret and refresh_token and folder_id):
+        print("upload_to_drive: missing GOOGLE_OAUTH_CLIENT_ID/SECRET/REFRESH_TOKEN or GOOGLE_DRIVE_FOLDER_ID")
         return ""
     try:
-        from google.oauth2 import service_account
+        from google.oauth2.credentials import Credentials
+        from google.auth.transport.requests import Request as GoogleRequest
         from googleapiclient.discovery import build
         from googleapiclient.http import MediaIoBaseUpload
-        creds = service_account.Credentials.from_service_account_info(
-            _j2.loads(creds_raw),
-            scopes=["https://www.googleapis.com/auth/drive"]
+        creds = Credentials(
+            token=None,
+            refresh_token=refresh_token,
+            client_id=client_id,
+            client_secret=client_secret,
+            token_uri="https://oauth2.googleapis.com/token",
+            scopes=["https://www.googleapis.com/auth/drive"],
         )
+        creds.refresh(GoogleRequest())
         svc = build("drive", "v3", credentials=creds)
         meta = {"name": filename, "parents": [folder_id]}
         media = MediaIoBaseUpload(
             _io2.BytesIO(file_bytes),
             mimetype="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         )
-        f = svc.files().create(body=meta, media_body=media, fields="id",
-                               supportsAllDrives=True).execute()
+        f = svc.files().create(body=meta, media_body=media, fields="id").execute()
         fid = f.get("id")
-        svc.permissions().create(fileId=fid, body={"type": "anyone", "role": "reader"},
-                                 supportsAllDrives=True).execute()
+        svc.permissions().create(fileId=fid, body={"type": "anyone", "role": "reader"}).execute()
         return f"https://drive.google.com/file/d/{fid}/view"
     except Exception as e:
         print(f"upload_to_drive failed: {e}")

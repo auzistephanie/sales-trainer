@@ -26,7 +26,7 @@ Push（`github_push.py` 永不 git CLI・HTTPS・一次 run 一 commit）・寫�
 - `api/daily_check.py` — 每日 10:00 HKT 由 cron-job.org 觸發（followup 提醒/週報/自動搵工）
 - `mbti_checker.py` — MBTI 20題檢測（`/mbti`）· `utils.py` — Redis I/O、Telegram 發送
 - `job_crm.py` + `pages/` — Streamlit 求職 CRM（https://sales-trainer-jatucpwszxyvoq5kpt7bav.streamlit.app）
-- `github_push.py` — push 用呢個，唔用 git CLI：`python3 github_push.py "<msg>"`（裝機步驟正本 → `stephanie-personal/docs/PUSH-SETUP.md`）
+- `scripts/github_push.py` — push 用呢個，唔用 git CLI：`python3 scripts/github_push.py "<msg>"`（2026-07-25 起全 repo 統一放 `scripts/`；裝機步驟正本 → `stephanie-personal/docs/PUSH-SETUP.md`）
 - `landing.html` — 復古滾動旅程 landing page（Vercel 靜態，`/landing.html`）
 - `webapp/` — **真 App（Web/PWA）**：Vite React 前端 + Flask AI API，Google 登入，跨裝置同步。詳見 `docs/APP_SPEC.md`
 
@@ -52,7 +52,7 @@ Push（`github_push.py` 永不 git CLI・HTTPS・一次 run 一 commit）・寫�
 2. **一次 run = 一個 commit**，唔好連環 push（Vercel 100 deployments/日上限）
 3. `requirements.txt` **唔准有 streamlit**（Vercel 500MB function 上限）
 4. 實跑驗證：Telegram bot／webapp 實際行一次相關流程先報完成，唔係「應該得」
-5. Push（`python3 github_push.py "<msg>"`）＋核實 GitHub HEAD（→ Standards §S1）
+5. Push（`python3 scripts/github_push.py "<msg>"`）＋核實 GitHub HEAD（→ Standards §S1）
 
 ## Backlog（未做，記低就算）
 
@@ -60,4 +60,4 @@ Push（`github_push.py` 永不 git CLI・HTTPS・一次 run 一 commit）・寫�
 
 ## Git Push
 
-每次改完檔案自動 push（`python3 github_push.py "<具體 commit msg>"`），唔使另外要求。其餘規則 → ⚙️ Standards §S1。
+每次改完檔案自動 push（`python3 scripts/github_push.py "<具體 commit msg>"`），唔使另外要求。其餘規則 → ⚙️ Standards §S1。
