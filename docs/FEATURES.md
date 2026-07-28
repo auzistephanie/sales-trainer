@@ -80,6 +80,7 @@
 - `generate_tailored_cv_content()` + `build_cv_docx()`（`interview_trainer.py`）已重寫，對齊 `tailored-cv-generator` skill 嘅 v7：navy heading + 底線、2-col Core Competencies table、keepNext 分頁、齊 Earlier Exp/Certs/Languages/Salary section
 - 修好「削肉」ATS 問題：唔再截 CV 到 3500 字（改 9000）、prompt 明確要求「保留所有 JD 相關 keyword，tailored 版 ATS 必須 ≥ 原版」
 - JSON 新增欄位：`earlier_experience` / `certifications` / `languages` / `salary`；experience 用 `title`（唔係 `role`）
+- **2026-07-28：Web App 都有埋**——`webapp/api/index.py` 新增 `POST /api/app/cv/tailor`，直接 call 呢頁嘅 4 個函數（`generate_tailored_cv_content` / `generate_cover_letter_from_jd` / `build_cv_docx` / `build_cover_letter_docx`，全部原封不動搬用，冇改邏輯），CV + Cover Letter 兩份 .docx 用 base64 一齊喺 JSON 度返，前端 `TailorCvTool`（`webapp/src/screens.jsx`）解碼做 Blob 落載。之前 Web App 淨係得一句提及字眼，冇實際畫面——而家兩邊（bot／webapp）都用得到呢個功能。
 
 ## 狀態機
 
