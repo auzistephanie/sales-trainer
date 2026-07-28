@@ -29,7 +29,22 @@ export function Login({ onLogin }) {
 export function Home({ profile, stats, onStart, onTool }) {
   const [loading, setLoading] = useState(false)
   const [err, setErr] = useState('')
+  const [tip, setTip] = useState('')
+  const [followups, setFollowups] = useState([])
   const name = profile?.display_name || '你'
+
+  useEffect(() => {
+    api.tip().then(r => setTip(r.result || '')).catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    if (!profile?.id) return
+    supabase.from('coach_jobs').select('*').in('status', ['已投', '面試中'])
+      .then(({ data }) => {
+        const cutoff = Date.now() - 7 * 86400000
+        setFollowups((data || []).filter(j => new Date(j.created_at).getTime() < cutoff))
+      })
+  }, [profile?.id])
 
   async function start() {
     setLoading(true); setErr('')
@@ -62,6 +77,12 @@ export function Home({ profile, stats, onStart, onTool }) {
         <div className="stat"><span className="num">{stats?.avg_score ? Math.round(stats.avg_score) : 0}</span><small>平均分</small></div>
         <div className="stat"><span className="num">{stats?.streak_days ?? 0}</span><small>連勝日</small></div>
       </div>
+      {tip && <div className="result-box" style={{ marginBottom: 14 }}>💡 {tip}</div>}
+      {followups.length > 0 && (
+        <button className="result-box" style={{ marginBottom: 14, background: 'rgba(201,154,60,.18)', textAlign: 'left', border: 'none', width: '100%', cursor: 'pointer' }} onClick={() => onTool('jobs')}>
+          ⏰ {followups.length} 份申請咗 7 日都未郁——撳去睇下使唔使 follow up
+        </button>
+      )}
       {err && <div className="err">{err}</div>}
       <button className="cta-big" onClick={start} disabled={loading}>
         {loading ? '生成緊場景…' : '🎬 開始今日練習'}
@@ -70,6 +91,7 @@ export function Home({ profile, stats, onStart, onTool }) {
       <div className="fgrid">
         {[
           ['cv', '📄', 'CV Health', 'AI 體檢你份 CV', 'var(--brick)'],
+          ['tailor', '✍️', '度身 CV + Cover Letter', '貼 JD，出 tailored 版', 'var(--brick-dk)'],
           ['salary', '💰', '薪酬情報', '市場人工範圍', 'var(--mustard)'],
           ['ats', '✅', 'ATS 檢查', '過機器篩選', 'var(--forest)'],
           ['negotiate', '🤝', '談判演練', '傾人工對白', 'var(--orange)'],
@@ -184,6 +206,7 @@ export function Score({ result, onNext, onHome }) {
 /* ---------------- TOOL DETAIL ---------------- */
 const TOOLS = {
   cv: { t: 'CV Health', c: 'var(--brick)', d: '上載 PDF/Word 或貼文字，AI 幫你體檢、揪弱位。', cvtool: true },
+  tailor: { t: '度身 CV + Cover Letter', c: 'var(--brick-dk)', d: '貼上你份 CV 同呢份工嘅 JD，AI 幫你出一份度身 tailored CV，仲有 cover letter，落載 .docx。', tailor: true },
   salary: { t: '薪酬情報', c: 'var(--mustard)', d: '輸入職位同期望人工，睇市場範圍。',
     fields: [['role', 'input', '職位（例：Product Manager）'], ['expected_salary', 'input', '期望月薪（例：45000）'], ['industry', 'input', '行業（可留空）']], call: (v) => api.salary(v) },
   ats: { t: 'ATS 檢查', c: 'var(--forest)', d: '貼 JD 同 CV，睇過機器篩選機率。',
@@ -247,6 +270,95 @@ function CvHealthTool({ profile }) {
         {loading ? 'AI 分析緊…' : '開始分析'}
       </button>
       {out && <div className="result-box">{out}</div>}
+    </>
+  )
+}
+
+function b64ToBlob(b64, mime) {
+  const bin = atob(b64)
+  const arr = new Uint8Array(bin.length)
+  for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i)
+  return new Blob([arr], { type: mime })
+}
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url; a.download = filename
+  document.body.appendChild(a); a.click(); a.remove()
+  URL.revokeObjectURL(url)
+}
+const DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+
+function TailorCvTool({ profile }) {
+  const [cvText, setCvText] = useState('')
+  const [filename, setFilename] = useState('')
+  const [extracting, setExtracting] = useState(false)
+  const [jdText, setJdText] = useState('')
+  const [company, setCompany] = useState('')
+  const [role, setRole] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [out, setOut] = useState(null)
+  const [err, setErr] = useState('')
+
+  async function onFile(e) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setExtracting(true); setErr('')
+    try {
+      const r = await api.cvExtract(file)
+      setCvText(r.text || '')
+      setFilename(r.filename || file.name)
+      if (!r.text) setErr('抽唔到文字（可能係掃描版 PDF），試下貼文字。')
+    } catch (e) { setErr('讀檔失敗：' + e.message) }
+    setExtracting(false)
+  }
+
+  async function run() {
+    if (!cvText.trim() || !jdText.trim()) return
+    setLoading(true); setErr(''); setOut(null)
+    try {
+      const r = await api.tailorCv({ cv_text: cvText, jd_text: jdText, company, role })
+      if (r.error) { setErr(r.error); setLoading(false); return }
+      setOut(r)
+      try {
+        await supabase.from('coach_cvs').insert({
+          user_id: profile.id, filename: `Tailored - ${company || role || '未命名'}`,
+          cv_text: JSON.stringify(r.cv_data), health: { tailored_for: `${company} ${role}`.trim() }
+        })
+      } catch (e) { /* 存底失敗唔阻顯示 */ }
+    } catch (e) { setErr('生成失敗：' + e.message) }
+    setLoading(false)
+  }
+
+  return (
+    <>
+      <label className="upload" style={{ display: 'block', cursor: 'pointer' }}>
+        <div className="u-ic">📄</div>
+        <p>{extracting ? '讀緊檔案…' : filename ? `已讀：${filename}（可再撳換）` : '撳我上載 CV（PDF / Word）'}</p>
+        <input type="file" accept=".pdf,.docx" onChange={onFile} style={{ display: 'none' }} />
+      </label>
+      <p style={{ fontSize: 12, color: 'var(--ink-soft)', textAlign: 'center', margin: '-6px 0 12px' }}>或者直接貼文字 ↓</p>
+      <textarea className="field" placeholder="貼上 CV 全文…" value={cvText} onChange={e => setCvText(e.target.value)} />
+      <input className="field" placeholder="公司名（可留空）" value={company} onChange={e => setCompany(e.target.value)} />
+      <input className="field" placeholder="職位（可留空）" value={role} onChange={e => setRole(e.target.value)} />
+      <textarea className="field" placeholder="貼上呢份工嘅 Job Description…" value={jdText} onChange={e => setJdText(e.target.value)} />
+      {err && <div className="err">{err}</div>}
+      <button className="cta-big" style={{ background: 'var(--brick-dk)' }} onClick={run} disabled={loading || extracting || !cvText.trim() || !jdText.trim()}>
+        {loading ? 'AI 度緊身（要一陣，唔好走開）…' : '生成 Tailored CV + Cover Letter'}
+      </button>
+      {out && (
+        <div className="result-box">
+          <p style={{ marginBottom: 10 }}>✅ 生成完成，落載落嚟啦：</p>
+          <button className="submit-a" style={{ background: 'var(--forest)', marginBottom: 8, width: '100%' }}
+            onClick={() => downloadBlob(b64ToBlob(out.cv_docx_b64, DOCX_MIME), `Tailored CV - ${company || role || 'CV'}.docx`)}>
+            ⬇️ 落載 Tailored CV (.docx)
+          </button>
+          <button className="submit-a" style={{ background: 'var(--orange)', width: '100%' }}
+            onClick={() => downloadBlob(b64ToBlob(out.cover_letter_docx_b64, DOCX_MIME), `Cover Letter - ${company || role || 'CV'}.docx`)}>
+            ⬇️ 落載 Cover Letter (.docx)
+          </button>
+        </div>
+      )}
     </>
   )
 }
@@ -414,6 +526,8 @@ export function ToolDetail({ toolKey, profile, onBack }) {
 
       {cfg.cvtool ? (
         <CvHealthTool profile={profile} />
+      ) : cfg.tailor ? (
+        <TailorCvTool profile={profile} />
       ) : cfg.jobs ? (
         <JobsManager profile={profile} />
       ) : cfg.chat ? (

@@ -2,7 +2,7 @@
 純 AI 運算層：包 interview_trainer 函數，唔掂 DB／secret。
 每個 request 帶 Supabase JWT，去 Supabase /auth/v1/user 驗證。
 DB 讀寫喺前端用 supabase-js + RLS 做。"""
-import sys, os, re, io
+import sys, os, re, io, base64
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent / "_lib"))
@@ -18,6 +18,8 @@ from interview_trainer import (
     calculate_ats_score, format_ats_message,
     generate_negotiate_response, extract_negotiate_reply, generate_negotiate_summary,
     generate_debrief,
+    generate_tailored_cv_content, generate_cover_letter_from_jd,
+    build_cv_docx, build_cover_letter_docx,
 )
 from mbti_checker import MBTI_QUESTIONS, calculate_mbti, MBTI_QUICK_DESC
 
@@ -187,6 +189,36 @@ def debrief():
     b = body()
     out = generate_debrief(b.get("job_info") or {}, b.get("debrief_text", ""))
     return jsonify({"result": out})
+
+
+@app.route("/api/app/cv/tailor", methods=["POST"])
+def cv_tailor():
+    """貼 CV + JD → 度身 tailored CV（.docx）+ Cover Letter（.docx），兩個檔案 base64 一齊返。
+    對齊 Telegram bot 嘅 generate_tailored_cv_content / build_cv_docx / build_cover_letter_docx，
+    純粹加條 web 版 route——AI 邏輯冧一行都冇改。"""
+    _, err = require_user()
+    if err: return err
+    b = body()
+    cv_text = (b.get("cv_text") or "").strip()
+    jd_text = (b.get("jd_text") or "").strip()
+    company = b.get("company", "")
+    role = b.get("role", "")
+    if not cv_text or not jd_text:
+        return jsonify({"error": "要有 CV 全文同 Job Description 先度身得到"}), 400
+
+    cv_data = generate_tailored_cv_content(cv_text, jd_text, company, role)
+    if not cv_data:
+        return jsonify({"error": "AI 生成失敗，請再試一次"}), 500
+    letter_text = generate_cover_letter_from_jd(cv_text, jd_text, company, role)
+    cv_bytes = build_cv_docx(cv_data, company, role)
+    letter_bytes = build_cover_letter_docx(letter_text, company, role, cv_data.get("name", ""))
+
+    return jsonify({
+        "cv_data": cv_data,
+        "cover_letter_text": letter_text,
+        "cv_docx_b64": base64.b64encode(cv_bytes).decode("ascii"),
+        "cover_letter_docx_b64": base64.b64encode(letter_bytes).decode("ascii"),
+    })
 
 
 @app.route("/api/app/tip", methods=["POST", "GET"])
