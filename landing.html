@@ -136,6 +136,31 @@ section{position:relative}
 @keyframes bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-9px)}}
 @media(max-width:900px){.hero__grid{grid-template-columns:1fr;gap:10px}.phone{margin-top:20px;transform:none}}
 
+/* ---- hero dual preview (Web App browser card + Telegram phone) ---- */
+.hero__visual{position:relative}
+.browser{position:absolute;top:-30px;left:-58px;width:290px;background:var(--paper);border-radius:14px;
+  box-shadow:0 22px 44px -16px var(--shadow),0 0 0 2px var(--ink);transform:rotate(-6deg);z-index:1;overflow:hidden}
+.browser__bar{background:var(--forest);padding:9px 12px;display:flex;align-items:center;gap:6px}
+.browser__dot{width:8px;height:8px;border-radius:50%;background:rgba(246,239,224,.5)}
+.browser__url{margin-left:6px;background:rgba(246,239,224,.15);color:var(--cream);font-size:10px;padding:3px 10px;
+  border-radius:999px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.browser__body{padding:14px 14px 16px;background:linear-gradient(var(--cream-2),var(--paper))}
+.browser__stats{display:flex;gap:8px;margin-bottom:10px}
+.browser__stat{flex:1;background:#fff;border-radius:8px;padding:8px 6px;text-align:center;box-shadow:1px 2px 5px rgba(0,0,0,.06)}
+.browser__stat b{display:block;font-family:"Fraunces";font-style:italic;font-size:17px;color:var(--brick-dk)}
+.browser__stat small{font-size:9px;color:var(--ink-soft)}
+.browser__tools{display:flex;flex-wrap:wrap;gap:6px}
+.browser__tool{font-size:10px;background:var(--forest);color:var(--cream);padding:3px 9px;border-radius:999px}
+.browser__badge{position:absolute;top:-14px;right:-10px;background:var(--brick);color:var(--cream);font-size:11px;font-weight:800;
+  padding:4px 11px;border-radius:999px;box-shadow:2px 2px 0 rgba(0,0,0,.3);z-index:2}
+.phone{z-index:2}
+.phone__badge{position:absolute;top:-14px;right:-14px;background:var(--mustard);color:var(--ink);font-size:11px;font-weight:800;
+  padding:4px 11px;border-radius:999px;box-shadow:2px 2px 0 rgba(0,0,0,.3);z-index:3}
+@media(max-width:900px){
+  .hero__visual{display:flex;flex-direction:column;align-items:center;gap:26px}
+  .browser{position:static;transform:none;width:100%;max-width:320px}
+}
+
 /* ---------- MARQUEE ---------- */
 .marquee{background:var(--forest);color:var(--cream);padding:16px 0;overflow:hidden;border-top:3px solid var(--ink);border-bottom:3px solid var(--ink)}
 .marquee__track{display:flex;gap:0;white-space:nowrap;width:max-content;animation:scrollx 26s linear infinite}
@@ -246,6 +271,21 @@ section{position:relative}
 .gate__caveat{max-width:600px;margin:24px auto 0;font-size:13px;color:rgba(246,239,224,.55)}
 @media(max-width:640px){.gates{grid-template-columns:1fr}}
 
+/* gate card mini previews — echo the hero dual mockup so the difference is visible at the decision point too */
+.gate-card__preview{border-radius:10px;overflow:hidden;margin-bottom:18px;box-shadow:0 4px 14px -6px rgba(0,0,0,.3)}
+.gate-card__preview--browser{background:var(--cream-2)}
+.gate-card__preview--browser .gpbar{background:var(--forest);padding:6px 10px;display:flex;gap:5px;align-items:center}
+.gate-card__preview--browser .gpdot{width:6px;height:6px;border-radius:50%;background:rgba(246,239,224,.5)}
+.gate-card__preview--browser .gpurl{margin-left:4px;background:rgba(246,239,224,.15);color:var(--cream);font-size:9px;padding:2px 8px;border-radius:999px}
+.gate-card__preview--browser .gpbody{padding:10px 10px 12px;display:flex;gap:6px}
+.gate-card__preview--browser .gpstat{flex:1;background:#fff;border-radius:6px;padding:6px 4px;text-align:center}
+.gate-card__preview--browser .gpstat b{display:block;font-family:"Fraunces";font-style:italic;font-size:14px;color:var(--brick-dk)}
+.gate-card__preview--browser .gpstat small{font-size:8px;color:var(--ink-soft)}
+.gate-card__preview--chat{background:var(--cream-2);padding:10px}
+.gate-card__preview--chat .gpbubble{max-width:78%;padding:6px 9px;border-radius:10px;font-size:10.5px;margin-bottom:6px;box-shadow:1px 1px 3px rgba(0,0,0,.08)}
+.gate-card__preview--chat .gpbubble.bot{background:#fff;border-bottom-left-radius:3px}
+.gate-card__preview--chat .gpbubble.me{background:var(--forest);color:var(--cream);border-bottom-right-radius:3px;margin-left:auto}
+
 /* footer */
 .footer{background:var(--dark-2);color:rgba(246,239,224,.7);padding:40px 0;text-align:center;font-size:14px;border-top:3px solid var(--ink)}
 .footer b{color:var(--cream);font-family:"Noto Serif TC"}
@@ -304,8 +344,26 @@ section{position:relative}
         <div><span class="num">24/7</span><small>隨時開練 · 追蹤進度</small></div>
       </div>
     </div>
-    <div class="reveal zoom d2" data-plx="-0.05">
+    <div class="reveal zoom d2 hero__visual" data-plx="-0.05">
+      <div class="browser">
+        <div class="browser__badge">🌐 Web App</div>
+        <div class="browser__bar">
+          <span class="browser__dot"></span><span class="browser__dot"></span><span class="browser__dot"></span>
+          <span class="browser__url">interview-coach-ten-delta.vercel.app</span>
+        </div>
+        <div class="browser__body">
+          <div class="browser__stats">
+            <div class="browser__stat"><b>12</b><small>已練題數</small></div>
+            <div class="browser__stat"><b>82</b><small>平均分</small></div>
+            <div class="browser__stat"><b>5🔥</b><small>連勝日</small></div>
+          </div>
+          <div class="browser__tools">
+            <span class="browser__tool">CV Health</span><span class="browser__tool">ATS 檢查</span><span class="browser__tool">求職 Tracker</span>
+          </div>
+        </div>
+      </div>
       <div class="phone">
+        <div class="phone__badge">💬 Telegram</div>
         <div class="phone__float a">即時評分 ★</div>
         <div class="phone__float b">連續練習 7 日 🔥</div>
         <div class="phone__screen">
@@ -419,7 +477,7 @@ section{position:relative}
         <div style="text-align:center;padding:30px 20px">
           <div style="font-size:40px;margin-bottom:10px">🎓</div>
           <h3 style="color:var(--cream);margin-bottom:8px">一站到底</h3>
-          <p style="color:rgba(246,239,224,.8);font-size:14px">練習 + 求職工具，全部喺同一個 bot，唔使開十個 app。</p>
+          <p style="color:rgba(246,239,224,.8);font-size:14px">練習 + 求職工具全部齊晒，Web App 或 Telegram bot 揀一種跟到尾，唔使開十個 app。</p>
         </div>
       </div>
     </div>
@@ -453,6 +511,10 @@ section{position:relative}
           <div class="gate-card__ic">🌐</div>
           <div><span class="gate-card__label">Gate A</span><b>Web App</b></div>
         </div>
+        <div class="gate-card__preview gate-card__preview--browser">
+          <div class="gpbar"><span class="gpdot"></span><span class="gpdot"></span><span class="gpdot"></span><span class="gpurl">interview-coach-ten-delta.vercel.app</span></div>
+          <div class="gpbody"><div class="gpstat"><b>12</b><small>已練</small></div><div class="gpstat"><b>82</b><small>平均分</small></div><div class="gpstat"><b>5🔥</b><small>連勝</small></div></div>
+        </div>
         <p>免安裝，撳個掣就用，跨裝置都搵到你嘅練習記錄，仲有度身 CV / Cover Letter 落載功能。</p>
         <a href="https://interview-coach-ten-delta.vercel.app" target="_blank" rel="noopener" class="gate-card__go">開始用 Web App →</a>
       </div>
@@ -460,6 +522,10 @@ section{position:relative}
         <div class="gate-card__hd">
           <div class="gate-card__ic">💬</div>
           <div><span class="gate-card__label">Gate B</span><b>Telegram bot</b></div>
+        </div>
+        <div class="gate-card__preview gate-card__preview--chat">
+          <div class="gpbubble bot">📋 面試官問：講一次搞砸咗嘅 project？</div>
+          <div class="gpbubble me">我會用 STAR 講一次真實例子…</div>
         </div>
         <p>傾偈式操作，Telegram 度打字就練，慣用 Telegram 嘅話呢邊最快上手。</p>
         <a href="https://t.me/salestraineraubot" target="_blank" rel="noopener" class="gate-card__go">開 Telegram bot →</a>
