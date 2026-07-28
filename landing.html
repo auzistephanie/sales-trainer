@@ -227,6 +227,25 @@ section{position:relative}
 .stamp.hit{transform:rotate(-14deg) scale(1)}
 @media(max-width:640px){.pass{grid-template-columns:1fr}.pass::before,.pass::after{display:none}.pass__stub{border-left:none;border-top:2px dashed rgba(246,239,224,.5)}}
 
+/* GATE A/B — choose your channel */
+.gates{display:grid;grid-template-columns:1fr 1fr;gap:26px;max-width:820px;margin:36px auto 0;text-align:left}
+.gate-card{background:var(--paper);color:var(--ink);border-radius:16px;padding:28px 26px;position:relative;
+  box-shadow:0 30px 60px -20px rgba(0,0,0,.6);display:flex;flex-direction:column}
+.gate-card__hd{display:flex;align-items:center;gap:12px;border-bottom:2px dashed var(--line);padding-bottom:14px;margin-bottom:16px}
+.gate-card__ic{width:44px;height:44px;border-radius:10px;display:grid;place-items:center;font-size:22px;box-shadow:2px 2px 0 var(--ink);flex-shrink:0}
+.gate-card__hd b{font-family:"Noto Serif TC";font-size:18px;display:block}
+.gate-card__label{font-family:"Fraunces";font-style:italic;color:var(--brick);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.05em}
+.gate-card p{font-size:14px;color:var(--ink-soft);line-height:1.6;margin-bottom:20px;flex:1}
+.gate-card__go{display:inline-block;text-align:center;padding:13px;border-radius:10px;font-weight:700;
+  box-shadow:3px 3px 0 rgba(0,0,0,.35);transition:transform .18s}
+.gate-card__go:hover{transform:translate(-1px,-1px)}
+.gate-card--a .gate-card__go{background:var(--brick);color:var(--cream)}
+.gate-card--a .gate-card__ic{background:var(--brick)}
+.gate-card--b .gate-card__go{background:var(--mustard);color:var(--ink)}
+.gate-card--b .gate-card__ic{background:var(--mustard)}
+.gate__caveat{max-width:600px;margin:24px auto 0;font-size:13px;color:rgba(246,239,224,.55)}
+@media(max-width:640px){.gates{grid-template-columns:1fr}}
+
 /* footer */
 .footer{background:var(--dark-2);color:rgba(246,239,224,.7);padding:40px 0;text-align:center;font-size:14px;border-top:3px solid var(--ink)}
 .footer b{color:var(--cream);font-family:"Noto Serif TC"}
@@ -253,7 +272,7 @@ section{position:relative}
     <a href="#features">功能</a>
     <a href="#jobkit">求職組</a>
     <a href="#how">點用</a>
-    <a href="https://interview-coach-ten-delta.vercel.app" target="_blank" rel="noopener" class="nav__cta">免費開始</a>
+    <a href="#contact" class="nav__cta">免費開始</a>
   </div>
 </nav>
 
@@ -272,11 +291,11 @@ section{position:relative}
 <section class="hero" id="top" data-zone="light">
   <div class="wrap hero__grid">
     <div>
-      <span class="hero__eyebrow reveal"><b></b>Telegram 上嘅 AI 面試特訓</span>
+      <span class="hero__eyebrow reveal"><b></b>AI 面試特訓 · Web App / Telegram 任揀</span>
       <h1 class="reveal d1">見工之前，<br>先同 AI <em>練到穩陣</em></h1>
-      <p class="hero__sub reveal d2">AI 即場生成貼身面試場景，逐題評分、指出弱點，仲會跟你嘅 MBTI 性格度身 coaching。由行為題練到薪酬談判，一個 Telegram bot 搞掂。</p>
+      <p class="hero__sub reveal d2">AI 即場生成貼身面試場景，逐題評分、指出弱點，仲會跟你嘅 MBTI 性格度身 coaching。由行為題練到薪酬談判，Web App 撳掣用，or Telegram 傾偈式練，揀啱你嗰種。</p>
       <div class="hero__cta reveal d3">
-        <a href="https://interview-coach-ten-delta.vercel.app" target="_blank" rel="noopener" class="btn btn--primary">🚀 免費開始練習</a>
+        <a href="#contact" class="btn btn--primary">🚀 免費開始練習</a>
         <a href="#features" class="btn btn--ghost">睇下有咩功能</a>
       </div>
       <div class="hero__stats reveal d4">
@@ -412,52 +431,48 @@ section{position:relative}
   <div class="wrap">
     <span class="scene__tag reveal">STOP 03 · 三步上手</span>
     <h2 class="scene__title reveal d1">三步就開練，冇任何門檻</h2>
-    <p class="scene__lead reveal d2">唔使裝 app、唔使開戶口。打開 Telegram，加 bot，即刻練。</p>
+    <p class="scene__lead reveal d2">揀你順手嗰種：Web App 唔使裝、撳個掣就用；Telegram 加個 bot 一樣快。</p>
     <div class="steps">
       <div class="steps__line"></div>
-      <div class="step reveal d1"><div class="step__n">1</div><h3>加入 Bot</h3><p>喺 Telegram 搵到教練，撳 <code>/start</code> 即刻上線。</p></div>
+      <div class="step reveal d1"><div class="step__n">1</div><h3>揀返你部隊</h3><p>Web App 撳個掣就用，或者 Telegram 搵到教練撳 <code>/start</code>。</p></div>
       <div class="step reveal d2"><div class="step__n">2</div><h3>開始練習</h3><p>打 <code>/practice</code> 揀難度，AI 即場出場景，逐題答逐題評。</p></div>
       <div class="step reveal d3"><div class="step__n">3</div><h3>睇進度</h3><p><code>/stats</code> 睇成長、<code>/streak</code> 守連勝，練到見工果日。</p></div>
     </div>
   </div>
 </section>
 
-<!-- GATE / contact boarding pass -->
+<!-- GATE A/B / contact -->
 <section class="gate" id="contact" data-zone="dark">
   <div class="wrap" style="text-align:center">
     <span class="scene__tag reveal">最後一站 · 登機</span>
-    <h2 class="scene__title reveal d1" style="color:var(--cream)">攞你嘅「面試通行證」</h2>
-    <p class="scene__lead reveal d2" style="margin:0 auto;color:rgba(246,239,224,.75)">由今日開始練，見工果日你會多謝自己。免費上手，隨時開始。</p>
-    <div class="pass reveal zoom d2">
-      <div class="pass__main">
-        <div class="pass__hd"><b>🎯 面試教練 · BOARDING PASS</b><span>PRACTICE</span></div>
-        <div class="pass__rows">
-          <div><small>Passenger 練習生</small><b>你 / Future Hire</b></div>
-          <div><small>Destination 目的地</small><b>Dream Offer ✦</b></div>
-          <div><small>Gate 登機口</small><b>Telegram</b></div>
-          <div><small>Boarding 開始</small><b>即刻 / NOW</b></div>
+    <h2 class="scene__title reveal d1" style="color:var(--cream)">揀返你部隊，攞你嘅「面試通行證」</h2>
+    <p class="scene__lead reveal d2" style="margin:0 auto;color:rgba(246,239,224,.75)">Web App 定 Telegram，邊個順手就用邊個。免費上手，隨時開始。</p>
+    <div class="gates">
+      <div class="gate-card gate-card--a reveal zoom d2">
+        <div class="gate-card__hd">
+          <div class="gate-card__ic">🌐</div>
+          <div><span class="gate-card__label">Gate A</span><b>Web App</b></div>
         </div>
-        <a href="https://interview-coach-ten-delta.vercel.app" target="_blank" rel="noopener" class="btn btn--primary" style="box-shadow:4px 4px 0 var(--brick-dk)">🚀 免費開始練習</a>
-        <div class="stamp" id="stamp">已錄取</div>
+        <p>免安裝，撳個掣就用，跨裝置都搵到你嘅練習記錄，仲有度身 CV / Cover Letter 落載功能。</p>
+        <a href="https://interview-coach-ten-delta.vercel.app" target="_blank" rel="noopener" class="gate-card__go">開始用 Web App →</a>
       </div>
-      <div class="pass__stub">
-        <div>
-          <small style="opacity:.8">SEAT</small>
-          <div class="num">A1</div>
+      <div class="gate-card gate-card--b reveal zoom d3">
+        <div class="gate-card__hd">
+          <div class="gate-card__ic">💬</div>
+          <div><span class="gate-card__label">Gate B</span><b>Telegram bot</b></div>
         </div>
-        <div>
-          <div class="pass__barcode"></div>
-          <a href="https://interview-coach-ten-delta.vercel.app" target="_blank" rel="noopener" class="pass__go">GO ▸</a>
-        </div>
+        <p>傾偈式操作，Telegram 度打字就練，慣用 Telegram 嘅話呢邊最快上手。</p>
+        <a href="https://t.me/salestraineraubot" target="_blank" rel="noopener" class="gate-card__go">開 Telegram bot →</a>
       </div>
     </div>
+    <p class="gate__caveat reveal d4">⚠️ 兩邊資料獨立、唔會同步——建議揀定一種持續用，跳嚟跳去進度會兜唔返。</p>
   </div>
 </section>
 
 <footer class="footer">
   <div class="wrap">
     <p><b>🎯 AI 面試教練</b> · 練到穩陣先去見工</p>
-    <p style="margin-top:8px">聯絡：<a href="https://interview-coach-ten-delta.vercel.app" target="_blank" rel="noopener">開始用 AI 面試教練</a> · © 2026</p>
+    <p style="margin-top:8px">開始：<a href="https://interview-coach-ten-delta.vercel.app" target="_blank" rel="noopener">Web App</a> · <a href="https://t.me/salestraineraubot" target="_blank" rel="noopener">Telegram bot</a> · © 2026</p>
   </div>
 </footer>
 
