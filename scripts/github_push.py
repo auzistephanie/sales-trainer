@@ -229,6 +229,17 @@ def main():
         _record_seen_sha(base_sha)
         return
 
+    # 2026-08-01：推之前一定列出檔案名單。背景：呢個 script 推成個 working tree，
+    # 如果有 scheduled task／另一個 session 同時寫緊嘢，佢哋啲檔會靜靜咁夾帶入你個
+    # commit（08-01 真實發生過）。冇名單就冇人會發現 —— 有名單就一眼睇到。
+    # 見到唔係自己改嘅檔 → Ctrl-C 停手，問 Stephanie（01-DISPATCH §7）。
+    _names = [t["path"] for t in tree]
+    print(f"   準備推 {len(_names)} 個檔（{uploaded} 更新 / {len(deletions)} 刪除）：")
+    for _p in _names[:15]:
+        print(f"     · {_p}")
+    if len(_names) > 15:
+        print(f"     … 另外 {len(_names) - 15} 個")
+
     new_tree = api("POST", f"{base}/trees", token, {"base_tree": base_tree, "tree": tree})
     commit = api("POST", f"{base}/commits", token, {
         "message": message, "tree": new_tree["sha"], "parents": [base_sha],
