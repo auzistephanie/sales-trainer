@@ -51,13 +51,27 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # --- 2026-07-15 concurrent-push 事後可見警報（overlap 診斷 fix A，見
 #     stephanie-personal CHANGELOG 2026-07-15）。Fail-silent，唔影響push行為，
 #     remote永遠贏，本地照常上——純粹畀你事後喺log見到「可能撞咗」。 ---
-_PUSH_STATE_DIR = os.path.join(os.path.dirname(REPO), "stephanie-personal", "scripts", ".push-state")
-_PUSH_STATE_FILE = os.path.join(_PUSH_STATE_DIR, os.path.basename(REPO) + ".json")
+# 2026-07-31 修：舊版當 stephanie-personal 一定係隔籬 folder（os.path.dirname(REPO)）。
+# 04-MAINTENANCE §6 將 5 個 repo 搬出 Drive Mirror 之後呢個假設崩咗——makedirs 靜靜咁喺
+# ~/Desktop/dev、~/dev 開咗假 stephanie-personal，6 個 repo 嘅 concurrent 偵測死咗都冇人知。
+def _resolve_personal():
+    for cand in (os.environ.get("STEPHANIE_PERSONAL_DIR"),
+                 os.path.expanduser("~/Desktop/Stephanie-Google Drive/dev/stephanie-personal"),
+                 os.path.join(os.path.dirname(REPO), "stephanie-personal")):  # legacy sibling 佈局
+        if cand and os.path.isdir(cand):
+            return cand
+    return None
+
+
+_PERSONAL = _resolve_personal()
+_PUSH_STATE_DIR = os.path.join(_PERSONAL, "scripts", ".push-state") if _PERSONAL else None
+_PUSH_STATE_FILE = (os.path.join(_PUSH_STATE_DIR, os.path.basename(REPO) + ".json")
+                    if _PUSH_STATE_DIR else None)
 
 
 def _check_concurrent_push(base_sha):
     try:
-        if not os.path.isfile(_PUSH_STATE_FILE):
+        if not _PUSH_STATE_FILE or not os.path.isfile(_PUSH_STATE_FILE):
             return
         last = json.load(open(_PUSH_STATE_FILE))
         last_sha = last.get("last_seen_sha")
@@ -68,6 +82,10 @@ def _check_concurrent_push(base_sha):
 
 
 def _record_seen_sha(sha):
+    if not _PUSH_STATE_DIR:  # S5「死咗邊個會知」：靜默失效改成出聲
+        print("⚠️ push-state 寫唔到（搵唔到 stephanie-personal）— concurrent-push 偵測已停用；"
+              "設環境變數 STEPHANIE_PERSONAL_DIR 指去正本即可修復")
+        return
     try:
         os.makedirs(_PUSH_STATE_DIR, exist_ok=True)
         with open(_PUSH_STATE_FILE, "w") as f:
