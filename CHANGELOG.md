@@ -1,5 +1,7 @@
 # 改版歷史
 
+- 2026-07-31：`.gitignore` 加 `*.bak-*` 第二道防線 — 配合 06-STANDARDS §S3「備份一律開喺 `_to_delete/`」，就算漏咗 mv 都唔會畀 `github_push.py` 誤推上 GitHub（2026-07-25 事故嘅根治）。本 repo 冇 governance `backups/`，所以唔需要 negation 例外。
+
 - 2026-07-31：`CLAUDE.md` ⚙️ Standards block 事實更正 — `governance 00–05（派 subagent 先讀 01+03…）` → `governance 00–06（派工跟 01 §1 門檻表，要派先抄 03 模板…）`。06-STANDARDS.md 07-18 已加入但 router 行仲寫 00–05；「先讀 01+03」07-31 鬆綁（為派一個 agent 先燒 230 行本身係 context 稅）。正本改動見 stephanie-personal CHANGELOG 同日條目。
 
 - 2026-07-31：repo 搬出 Google Drive Mirror，新位置 `~/Desktop/dev/sales-trainer`。原因：node_modules 嘅 npm `.bin` symlink 令 Drive 持續報 sync error。換機唔再靠 Drive 帶 secrets，詳見 `stephanie-personal/docs/NEW-MACHINE-SETUP.md` §9。

@@ -10,3 +10,6 @@ _to_delete/
 
 # session-lock.sh 嘅鎖檔（Drive mount rm 唔到會改名做 .DELETE-ME-*，兩種都唔好推上 GitHub）
 .active-session.lock*
+
+# 備份檔一律入 _to_delete/（06-STANDARDS §S3, 2026-07-31）；呢條係第二道防線，漏咗 mv 都唔會誤推上 GitHub
+*.bak-*
