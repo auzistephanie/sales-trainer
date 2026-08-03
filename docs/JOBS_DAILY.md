@@ -16,6 +16,10 @@ Status 值：Applied / Phone Screen / 1st Interview / 2nd Interview / Offer / Re
 
 `/listjobs` → 顯示所有 jobs + inline keyboard（Questions / Tips / Practice / Update Status）
 
+`/clearjobs`（2026-08-04）→ 問「真係要刪晒 N 份記錄？」，撳 `clearjobs_confirm` 先 `save_jobs([])`，防手滑清空 `interview_jobs`。
+
+**ATS 分數 + 空 JD**（2026-08-04）：`handle_job_tailored_cv()` 生成 Tailored CV 後計 `ats_score`，但如果 `job["jd"]` 係空字串（`/addjob` 嗰步撳咗 `/skip`），會跳過唔計——JD 空白冇嘢畀 DeepSeek 抽 keyword，計出嚟嘅分數會冧到近乎恆定，冇意思。想要準確 ATS 分，加 job 記錄時要貼返 JD。
+
 Inline callbacks：`job_q_{id}` / `job_tips_{id}` / `job_practice_{id}` / `job_updatestatus_{id}` / `job_status_{id}_{status}`
 
 AI functions in interview_trainer.py：`generate_job_questions(job)` / `generate_job_tips(job)`

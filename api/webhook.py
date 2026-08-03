@@ -594,6 +594,21 @@ def handle_addjob_start():
     )
 
 
+def handle_clearjobs_start():
+    """/clearjobs — 刪晒所有求職記錄前要求確認，防手滑。"""
+    jobs = load_jobs()
+    if not jobs:
+        send_telegram("而家冇任何求職記錄，唔使清。")
+        return
+    send_telegram(
+        f"⚠️ 呢個動作會刪晒全部 {len(jobs)} 份求職記錄，刪咗冇得復原。\n\n真係要刪晒？",
+        reply_markup={"inline_keyboard": [[
+            {"text": "🗑️ 確認刪晒", "callback_data": "clearjobs_confirm"},
+            {"text": "❌ 取消",     "callback_data": "clearjobs_cancel"},
+        ]]}
+    )
+
+
 def handle_listjobs():
     jobs = load_jobs()
     if not jobs:
@@ -729,12 +744,17 @@ def handle_job_tailored_cv(job_id: str):
             )
         # 2026-07-25 修正：ATS 要計啱啱生成嘅 tailored CV，唔係原版 CV。
         # 同一組 keyword 分別計原版（baseline）同 tailored，兩個分先可比。
-        tailored_text = flatten_cv_data(cv_data)
-        ats  = calculate_ats_score(job.get("jd", ""), tailored_text)
-        base = calculate_ats_score("", cv_text, keywords=ats.get("keywords") or [])
-        send_telegram(format_ats_message(ats, base.get("score")))
-        job["ats_score"] = ats.get("score")
-        job["ats_baseline"] = base.get("score")
+        # 2026-08-04 修正：JD 空白（/addjob 撳咗 /skip）冇嘢畀 DeepSeek 抽 keyword，
+        # 計出嚟嘅分數冧到近乎恆定、冇意思——跳過，唔好存一個誤導性嘅 ats_score。
+        if job.get("jd", "").strip():
+            tailored_text = flatten_cv_data(cv_data)
+            ats  = calculate_ats_score(job.get("jd", ""), tailored_text)
+            base = calculate_ats_score("", cv_text, keywords=ats.get("keywords") or [])
+            send_telegram(format_ats_message(ats, base.get("score")))
+            job["ats_score"] = ats.get("score")
+            job["ats_baseline"] = base.get("score")
+        else:
+            send_telegram("ℹ️ 呢份工冇貼 JD，跳過 ATS 分數計算（要貼咗 JD 先計得準）。")
         if drive_link:
             job["cv_drive_link"] = drive_link
         save_jobs(jobs)
@@ -1185,6 +1205,13 @@ def handle_callback(cb):
     elif data == "show_listjobs":
         handle_listjobs()
 
+    elif data == "clearjobs_confirm":
+        save_jobs([])
+        send_telegram("✅ 已刪晒所有求職記錄。用 /addjob 開始重新記錄。")
+
+    elif data == "clearjobs_cancel":
+        send_telegram("已取消，記錄冇郁過。")
+
     elif data == "addjob_cancel":
         clear_addjob_session()
         send_telegram("✅ 已取消。用 /addjob 再試。")
@@ -1590,7 +1617,8 @@ def handle_message(text):
             "🎓 AI 面試教練\n\n"
             "📋 *求職追蹤*\n"
             "/addjob — 新增求職申請\n"
-            "/listjobs — 睇所有申請 + AI 面試問題\n\n"
+            "/listjobs — 睇所有申請 + AI 面試問題\n"
+            "/clearjobs — 刪晒所有求職記錄（需確認）\n\n"
             "🎯 *練習*\n"
             "/practice — 隨機面試練習\n"
             "/practice 初級／中級／高級 — 指定難度\n"
@@ -1721,6 +1749,10 @@ def handle_message(text):
         handle_listjobs()
         return
 
+    if cmd(text, "/clearjobs"):
+        handle_clearjobs_start()
+        return
+
     # 未知輸入：引導
     profile = load_profile()
     if not profile or (not profile.get("job_title") and not profile.get("industry")):
@@ -1812,6 +1844,7 @@ def set_webhook():
     commands = [
         {"command": "addjob",   "description": "新增求職申請記錄"},
         {"command": "listjobs", "description": "查看所有申請 + AI 面試問題"},
+        {"command": "clearjobs", "description": "刪晒所有求職記錄（需確認）"},
         {"command": "practice", "description": "隨機面試練習"},
         {"command": "drill",    "description": "針對特定題型練習"},
         {"command": "stats",    "description": "我的進度報告"},
