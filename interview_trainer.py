@@ -787,16 +787,32 @@ REMEMBER: body ≤ 150 words. Count before you finish."""
         return f"⚠️ 生成失敗：{e}"
 
 
-def generate_tailored_cv_content(cv_text: str, jd_text: str, company: str, role: str) -> dict:
+def generate_tailored_cv_content(cv_text: str, jd_text: str, company: str, role: str,
+                                  confirmed_extras: list = None) -> dict:
     """根據 JD 分析 CV，返回 tailored CV 各部份內容（dict），供 v7 .docx 生成用。
 
     2026-07-02 重寫：對齊 tailored-cv-generator skill 嘅 v7 品質。
     重點修正「削肉」問題 —— 舊版截 CV 到 3500 字 + 只留 4 bullet，會掉走 keyword
     令 tailored 版 ATS 反而低過原版。新版用足本 CV + 明確要求「保留所有 JD 相關 keyword，
     tailored 版 ATS 必須 ≥ 原版」。
+
+    confirmed_extras：2026-08-04 新增。ATS 分數話 CV 未涵蓋某啲 JD keyword 之後，
+    用戶親口確認自己實際有嗰啲經驗 —— 呢個 list 會加一條額外規則入 prompt，
+    容許 AI 將呢啲字眼自然編入 summary/core_competencies/bullet，但唔准作未提過嘅
+    公司/職銜/日期/數字（規則 1 照舊生效）。
     """
     import json as _json
     ai_client = OpenAI(api_key=DEEPSEEK_API_KEY, base_url="https://api.deepseek.com")
+
+    extra_rule = ""
+    if confirmed_extras:
+        extra_rule = (
+            f"\n9. The candidate has confirmed real hands-on experience in the following "
+            f"additional skills, which may not be prominent in the original CV text — "
+            f"naturally weave them into the summary, core_competencies, and/or the most "
+            f"relevant experience bullet(s), WITHOUT inventing any company, title, date or "
+            f"metric that isn't already in the CV: {', '.join(confirmed_extras)}."
+        )
 
     prompt = f"""You are an expert ATS-optimised CV writer for the Hong Kong job market.
 Tailor the candidate's CV for this specific job.
@@ -809,7 +825,7 @@ CRITICAL RULES:
 5. Core competencies: 8–12 items, split naturally into operations/admin skills AND technology/automation/tools, all drawn from the CV.
 6. Each experience bullet: achievement-oriented (action verb + what + result), quantified whenever the CV gives numbers. Give 3–4 bullets per role (keep the strongest).
 7. Do NOT mention degree/education or language ability inside the professional summary.
-8. Extract education, certifications, languages and expected salary from the CV if present. If a field is genuinely absent, return "" or [] — NEVER write placeholder text like "not specified" or "N/A".
+8. Extract education, certifications, languages and expected salary from the CV if present. If a field is genuinely absent, return "" or [] — NEVER write placeholder text like "not specified" or "N/A".{extra_rule}
 
 【Original CV (full)】
 {cv_text[:9000]}
@@ -1420,6 +1436,20 @@ JD:
 
     return {"score": score, "matched": matched, "missing": missing,
             "keywords": keywords, "improvement": improvement}
+
+
+def match_confirmed_skills(text: str, missing: list) -> tuple:
+    """用戶回覆 ATS「話我知我幫你加返」之後，睇下回覆入面提到邊啲 missing keyword。
+
+    2026-08-04 新增。純字眼 substring 比對（大小寫不分），唔叫 API —— missing
+    list 本身已經好短（15-20 個 keyword 入面嘅少數），簡單比對夠用；比對唔中嘅
+    留低畀用戶睇返（1B：列返個 missing 清單畀佢揀番，減低打漏機會）。
+    """
+    text_lower = (text or "").lower()
+    confirmed, unmatched = [], []
+    for kw in missing:
+        (confirmed if kw.lower() in text_lower else unmatched).append(kw)
+    return confirmed, unmatched
 
 
 def format_ats_message(ats: dict, baseline_score: int = None) -> str:

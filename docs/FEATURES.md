@@ -62,7 +62,7 @@
 - Keyword 抽取 prompt 有 INCLUDE ONLY / EXCLUDE 兩段：只收 hard skills / 工具 / 系統 / 學歷 / 行業術語 / 核心職能；**明確排除**僱主自家 programme 品牌名（如 "EngSeeds Programme"）、合約年期、工作模式（"1-year contract"、"5-Day Work"）、公司名 / 地區 / 人工 / 福利 / 工時，以及 "good communication" 類通用廢詞。強制 `Output in ENGLISH only, exactly as written in the JD`
 - `_ats_stem()`（2026-07-25 加強）：兩層剪詞尾 `ions/ion/ments/ment/ings/ing/ies/ied/ed/es/s` + 去尾 `e`，所以 coordinate / coordinated / coordinating / coordination 全部歸一做 `coordinat`，management / managing / manage → `manag`
 - `smart_match()` 拆 multi-word 時濾走長度 1 嘅 token（`len(p) > 1`）：`Bachelor's degree` 會拆出 `bachelor / s / degree`，嗰個 `s` 會令命中率跌到 2/3 < 70% 而錯判 miss
-- `improvement` 唔再重複列 missing 清單（上面 `⚠️` 行已經列曬），只留一句「有就話我知我幫你加返；冇嘅話唔會幫你作」
+- `improvement` 唔再重複列 missing 清單（上面 `⚠️` 行已經列曬），只留一句「有就話我知我幫你加返；冇嘅話唔會幫你作」——**2026-08-04 起呢句真係做嘢**：回覆會存入 `ats_followup`（job flow）／`jd_ats_followup`（JD-session flow）state，`match_confirmed_skills()` 揪出回覆入面提到邊啲 missing keyword，冇 match 到就列清單畀用戶再試，有 match 到就帶 `confirmed_extras` 重新生成 CV + 重計 ATS，回覆 before/after 分數
 - 存 `job["ats_score"]` + `job["ats_baseline"]`（JD session 同樣）
 
 **薪酬談判 Negotiate**（`/negotiate`）

@@ -24,7 +24,7 @@ from interview_trainer import (
     generate_salary_benchmark, parse_salary_input,
     generate_negotiate_response, generate_negotiate_summary, extract_negotiate_reply,
     generate_debrief,
-    calculate_ats_score, format_ats_message, flatten_cv_data,
+    calculate_ats_score, format_ats_message, flatten_cv_data, match_confirmed_skills,
 )
 from utils import (
     load_stats, save_stats,
@@ -753,6 +753,10 @@ def handle_job_tailored_cv(job_id: str):
             send_telegram(format_ats_message(ats, base.get("score")))
             job["ats_score"] = ats.get("score")
             job["ats_baseline"] = base.get("score")
+            # 2026-08-04：有 missing keyword 先開 follow-up state，等用戶回覆邊啲佢有經驗。
+            if ats.get("missing"):
+                save_session({"state": "ats_followup", "job_id": job_id,
+                               "missing": ats["missing"], "keywords": ats["keywords"]})
         else:
             send_telegram("ℹ️ 呢份工冇貼 JD，跳過 ATS 分數計算（要貼咗 JD 先計得準）。")
         if drive_link:
@@ -1029,6 +1033,11 @@ def handle_jd_tailored_cv():
         sess["ats_baseline"] = base.get("score")
         if drive_link:
             sess["cv_drive_link"] = drive_link
+        # 2026-08-04：有 missing keyword 先開 follow-up state，等用戶回覆邊啲佢有經驗。
+        if ats.get("missing"):
+            sess["state"]        = "jd_ats_followup"
+            sess["ats_missing"]  = ats["missing"]
+            sess["ats_keywords"] = ats["keywords"]
         save_jd_session(sess)
     except Exception as e:
         send_telegram(f"❌ 生成 .docx 失敗：{e}")
@@ -1371,6 +1380,37 @@ def handle_callback(cb):
         _redis_del(f"scanned_job:{short_id}")
 
 
+def _ats_followup_regenerate(cv_text: str, jd_text: str, company: str, role: str,
+                              confirmed: list, keywords: list):
+    """2026-08-04 新增：用戶確認額外技能後，重新生成 tailored CV + 重計 ATS。
+
+    keywords 沿用第一次抽嗰組（唔再叫 DeepSeek 抽 keyword），慳一次 API call，
+    亦令新舊分數用返同一組 keyword 先可比。
+    """
+    cv_data = generate_tailored_cv_content(cv_text, jd_text, company, role, confirmed_extras=confirmed)
+    if not cv_data:
+        return None, b"", {}
+    docx_bytes    = build_cv_docx(cv_data, company, role)
+    tailored_text = flatten_cv_data(cv_data)
+    new_ats       = calculate_ats_score(jd_text, tailored_text, keywords=keywords)
+    return cv_data, docx_bytes, new_ats
+
+
+def _send_ats_followup_result(confirmed: list, old_score, new_ats: dict, drive_link: str,
+                               docx_bytes: bytes, filename: str, caption: str):
+    if drive_link:
+        send_telegram(f"✅ Tailored CV 已更新！\n\n[🔗 打開新版 CV]({drive_link})")
+    else:
+        send_document(docx_bytes, filename, caption=caption)
+    new_score     = new_ats.get("score", old_score)
+    still_missing = new_ats.get("missing", [])
+    msg = f"📊 ATS Match Score：{new_score}/100（加返 {'、'.join(confirmed)} 前：{old_score}/100）"
+    if still_missing:
+        msg += f"\n⚠️ 仲欠：{'、'.join(still_missing)}"
+    send_telegram(msg)
+    return new_score
+
+
 # ── Message ───────────────────────────────────────────────────────
 
 def handle_message(text):
@@ -1378,6 +1418,43 @@ def handle_message(text):
     jd_sess = load_jd_session()
     if jd_sess and not text.startswith("/"):
         state = jd_sess.get("state", "")
+
+        if state == "jd_ats_followup":
+            missing  = jd_sess.get("ats_missing", [])
+            keywords = jd_sess.get("ats_keywords", [])
+            confirmed, unmatched = match_confirmed_skills(text, missing)
+            if not confirmed:
+                send_telegram(
+                    "🤔 冇搵到相關字眼喎。可以打返呢啲入面確實嘅字眼：\n"
+                    + "、".join(unmatched)
+                )
+                return
+            cv_text = load_cv_text()
+            if not cv_text:
+                send_telegram("⚠️ 未有你嘅 CV 記錄。")
+                return
+            company   = jd_sess.get("company", "")
+            role      = jd_sess.get("role", "")
+            old_score = jd_sess.get("ats_score")
+            send_telegram(f"🔄 加緊 [{'、'.join(confirmed)}] 落 CV，重新生成緊⋯（約 15 秒）")
+            cv_data, docx_bytes, new_ats = _ats_followup_regenerate(
+                cv_text, jd_sess.get("jd_text", ""), company, role, confirmed, keywords
+            )
+            if not cv_data:
+                send_telegram("❌ 重新生成失敗，請重試。")
+                return
+            filename   = f"CV_Tailored_{company.replace(' ','_')[:20]}.docx"
+            drive_link = upload_to_drive(docx_bytes, filename)
+            new_score  = _send_ats_followup_result(
+                confirmed, old_score, new_ats, drive_link, docx_bytes, filename,
+                caption=f"📄 Tailored CV — {role} @ {company}（已加返你確認嘅技能）"
+            )
+            jd_sess["ats_score"] = new_score
+            jd_sess["state"]     = "jd_ready"
+            if drive_link:
+                jd_sess["cv_drive_link"] = drive_link
+            save_jd_session(jd_sess)
+            return
 
         if state == "waiting_jd_text":
             jd_sess["jd_text"] = text.strip()
@@ -1535,6 +1612,50 @@ def handle_message(text):
     # Practice / Review session
     session = load_session()
     state   = session.get("state", "") if session else ""
+
+    if state == "ats_followup" and not text.startswith("/"):
+        missing  = session.get("missing", [])
+        keywords = session.get("keywords", [])
+        job_id   = session.get("job_id")
+        confirmed, unmatched = match_confirmed_skills(text, missing)
+        if not confirmed:
+            send_telegram(
+                "🤔 冇搵到相關字眼喎。可以打返呢啲入面確實嘅字眼：\n"
+                + "、".join(unmatched)
+            )
+            return
+        jobs = load_jobs()
+        job  = next((j for j in jobs if j["id"] == job_id), None)
+        if not job:
+            send_telegram("⚠️ 搵唔到呢個申請記錄，可能已經刪咗。")
+            clear_session()
+            return
+        cv_text = load_cv_text()
+        if not cv_text:
+            send_telegram("⚠️ 未有你嘅 CV 記錄。")
+            clear_session()
+            return
+        old_score = job.get("ats_score")
+        send_telegram(f"🔄 加緊 [{'、'.join(confirmed)}] 落 CV，重新生成緊⋯（約 15 秒）")
+        cv_data, docx_bytes, new_ats = _ats_followup_regenerate(
+            cv_text, job.get("jd", ""), job["company"], job["role"], confirmed, keywords
+        )
+        if not cv_data:
+            send_telegram("❌ 重新生成失敗，請重試。")
+            clear_session()
+            return
+        filename   = f"CV_{job['company'].replace(' ','_')[:20]}_{job['role'].replace(' ','_')[:15]}.docx"
+        drive_link = upload_to_drive(docx_bytes, filename)
+        new_score  = _send_ats_followup_result(
+            confirmed, old_score, new_ats, drive_link, docx_bytes, filename,
+            caption=f"📋 Tailored CV for {job['role']} @ {job['company']}（已加返你確認嘅技能）"
+        )
+        job["ats_score"] = new_score
+        if drive_link:
+            job["cv_drive_link"] = drive_link
+        save_jobs(jobs)
+        clear_session()
+        return
 
     if state == "waiting_response" and not text.startswith("/"):
         handle_user_response(text)
