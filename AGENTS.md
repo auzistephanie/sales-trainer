@@ -7,9 +7,11 @@
 
 ## 🚫 第 1 條（最重要）：**永遠唔准用 git CLI 做 push**
 
-呢個 repo 住喺 **Google Drive Mirror** 資料夾入面。喺 Drive 上面跑 `git add` / `git commit` /
-`git push` / `git fetch` / `git reset` 會留低 stale `.git/index.lock`、`HEAD.lock`、
-`refs/heads/main.lock` —— 之後**所有** commit 會被擋，一卡可以卡幾十個鐘，而且好難查。
+呢個 repo 住喺本機 `~/dev/`（2026-08-16 由 Google Drive Mirror 搬返嚟——Drive 對 `.git` 造成
+靜默破壞：回捲檔案、整衝突副本、刪走正本，詳見 `06-STANDARDS.md` §S1／memory
+「drive-回捲事故-20260816」。GitHub 而家係唯一同步正本）。**就算唔喺 Drive，一樣唔准用 git
+CLI**：Cowork device bridge（`device_bash`）掛嘅 mount 一樣會留低 stale `.git/index.lock`
+（unlink 唔到，Operation not permitted），而且 raw git 繞唔過兩部機三道閘（見下）。
 
 **要推嘢，一律用：**
 
@@ -71,12 +73,12 @@ curl -H "Authorization: Bearer $GITHUB_TOKEN" \
 
 ## 🔀 兩部機 + 兩個 agent（2026-08-16 起）
 
-Stephanie 有兩部 Mac，兩部都經 Google Drive Mirror 同步同一批 repo，兩部都會同時
-用 Claude 同 Codex。所以 `github_push.py` 有三道閘，**撞到閘唔好即刻 `--force` 衝過去**：
+Stephanie 有兩部 Mac，兩部都靠 GitHub 做正本同步同一批 repo（2026-08-16 起唔再經
+Google Drive Mirror），兩部都會同時用 Claude 同 Codex。所以 `github_push.py` 有三道閘，**撞到閘唔好即刻 `--force` 衝過去**：
 
 | 閘 | 幾時擋你 | 點做 |
 |---|---|---|
-| **閘 1 刪檔** | 今次會刪走遠端 >3 個檔 | 多數係 Drive 未 sync 完，你部機仲未見到另一部機新增嘅檔。**等 Drive 追返先**。真係要刪 → `--allow-deletions` |
+| **閘 1 刪檔** | 今次會刪走遠端 >3 個檔 | 多數係另一部機／session 啱啱新增咗檔，你手上份仲未 pull。**先 `--check` 確認，唔好即刻 `--allow-deletions`**。 |
 | **閘 2 SHA** | 遠端 SHA 喺你上次見到之後變咗 | 另一部機／session 推過嘢，你手上份 base 舊咗。跑 `--check` 睇差異，確認唔會覆蓋人哋，再 `--force` |
 | **閘 3 交叉 review** | 對家 AI 判咗 `BLOCK` | Codex 推 → Claude review；Claude 推 → Codex review。BLOCK 只限 4 類（secrets 洩漏／刪錯檔／明顯 bug／半成品夾帶）。修好再推，或者 `--no-review` |
 
@@ -86,7 +88,7 @@ Stephanie 有兩部 Mac，兩部都經 Google Drive Mirror 同步同一批 repo�
 python3 scripts/github_push.py --check
 ```
 
-見到「遠端喺你上次見到之後變咗」→ 等 Google Drive sync 完先開工，否則你改嘅嘢會建喺舊 base 上面。
+見到「遠端喺你上次見到之後變咗」→ 唔好即刻 `--force`，先睇差異係咪另一部機／agent 啱啱推咗嘢，確認唔會覆蓋人哋先繼續。
 
 **收工即推，唔好留改動過夜。** 呢條係兩機並行下唯一 100% 有效嘅防線 —— 兩部機都乾淨咗，
 下次開工邊部都啱。
@@ -117,5 +119,5 @@ python3 scripts/github_push.py --check
 **語言**：同 Stephanie 講嘢用**廣東話 + 繁體中文**。
 
 ---
-*正本位置：`stephanie-personal/scripts/AGENTS.md.template`，2026-08-16 一次過派落 12 個 repo。
-改規則改正本 `06-STANDARDS.md`，唔好逐個 repo 改呢份。*
+*正本位置：`stephanie-personal/scripts/AGENTS.md.template`，2026-08-16 一次過派落 12 個 repo；
+同日再更新一次（搬離 Drive Mirror 去 `~/dev/`）。改規則改正本 `06-STANDARDS.md`，唔好逐個 repo 改呢份。*
