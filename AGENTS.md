@@ -8,7 +8,7 @@
 ## 🚫 第 1 條（最重要）：**永遠唔准用 git CLI 做 push**
 
 呢個 repo 住喺本機 `~/dev/`（2026-08-16 由 Google Drive Mirror 搬返嚟——Drive 對 `.git` 造成
-靜默破壞：回捲檔案、整衝突副本、刪走正本，詳見 `06-STANDARDS.md` §S1／memory
+靜默破壞：回捲檔案、整衝突副本、刪走正本，詳見 `STANDARDS.md` §S1／memory
 「drive-回捲事故-20260816」。GitHub 而家係唯一同步正本）。**就算唔喺 Drive，一樣唔准用 git
 CLI**：Cowork device bridge（`device_bash`）掛嘅 mount 一樣會留低 stale `.git/index.lock`
 （unlink 唔到，Operation not permitted），而且 raw git 繞唔過兩部機三道閘（見下）。
@@ -103,13 +103,13 @@ python3 scripts/github_push.py --check
 | 你要知 | 讀邊份 |
 |---|---|
 | 本 repo 架構、模組、專屬 DoD | 同層 `CLAUDE.md` |
-| 全 repo 共用 standards（正本） | `stephanie-personal/docs/ai-governance/06-STANDARDS.md` |
-| 判斷 rubric（幾時要停低問人 R3、完成定義 R2） | `.../02-JUDGMENT.md` |
-| 派工守則、夾帶事故 §7.1 | `.../01-DISPATCH.md` |
+| 全 repo 共用 standards（正本） | `stephanie-personal/docs/ai-governance/STANDARDS.md` |
+| 判斷 rubric（幾時要停低問人 §S3、完成定義 §S2） | `.../STANDARDS.md` |
+| 夾帶事故（push 夾帶第三方檔案）§S1 | `.../STANDARDS.md` |
 | 新 repo 裝 push kit | `stephanie-personal/docs/PUSH-SETUP.md` |
 | 新機設置 | `stephanie-personal/docs/NEW-MACHINE-SETUP.md` |
 
-**方向性決定先問，細節唔使問**（正本 02 §R3）：
+**方向性決定先問，細節唔使問**（正本 STANDARDS §S3）：
 - **要停低問**：不可逆 **＋** 出咗 repo（真人／客戶收到訊息、live flow 變咗、錢郁咗、刪 production 資料）
 - **唔使問，做完報告就得**：可逆 ＋ 喺 repo 入面 ＋ 冇對外影響（改檔、修 bug、加 gitignore、清雜檔、事實更正）
 
@@ -120,4 +120,4 @@ python3 scripts/github_push.py --check
 
 ---
 *正本位置：`stephanie-personal/scripts/AGENTS.md.template`，2026-08-16 一次過派落 12 個 repo；
-同日再更新一次（搬離 Drive Mirror 去 `~/dev/`）。改規則改正本 `06-STANDARDS.md`，唔好逐個 repo 改呢份。*
+同日再更新一次（搬離 Drive Mirror 去 `~/dev/`）。改規則改正本 `STANDARDS.md`，唔好逐個 repo 改呢份。*
