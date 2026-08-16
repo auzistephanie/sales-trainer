@@ -32,7 +32,7 @@ Push（`github_push.py`，永不 git CLI・HTTPS・一 run 一 commit・**開工
 
 Telegram bot https://sales-trainer-wheat.vercel.app · Web App https://interview-coach-ten-delta.vercel.app · Streamlit CRM https://sales-trainer-jatucpwszxyvoq5kpt7bav.streamlit.app · landing `/landing.html`
 
-## ✅ 完成前檢查（本 repo 專屬 DoD；通用四格 → 02-JUDGMENT §R2）
+## ✅ 完成前檢查（本 repo 專屬 DoD；通用四格 → STANDARDS.md §S2）
 
 1. 改/加 bot 指令 → 探訪 set_webhook sync menu ＋ Telegram 實見新 menu
 2. 實跑驗證：Telegram bot／webapp 實際行一次相關流程先報完成，唔係「應該得」
