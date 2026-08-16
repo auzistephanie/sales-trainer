@@ -13,3 +13,10 @@ _to_delete/
 
 # 備份檔一律入 _to_delete/（06-STANDARDS §S3, 2026-07-31）；呢條係第二道防線，漏咗 mv 都唔會誤推上 GitHub
 *.bak-*
+
+# Google Drive Mirror 衝突副本（兩機並行時 Drive 會自動整多份 "xxx (1).ext"）
+# 一律唔准推上 GitHub（2026-08-16 加，10 個副本曾差啲夾帶）
+* (1)*
+* (2)*
+* (3)*
+*conflicted copy*
