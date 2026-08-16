@@ -117,7 +117,7 @@ CODEX_BIN_CANDIDATES = (
 # 2026-08-16 升級：由「事後 print 警告」變成「事前 hard stop」（閘 2）。
 def _resolve_personal():
     for cand in (os.environ.get("STEPHANIE_PERSONAL_DIR"),
-                 os.path.expanduser("~/Desktop/Stephanie-Google Drive/dev/stephanie-personal"),
+                 os.path.expanduser("~/dev/stephanie-personal"),
                  os.path.join(os.path.dirname(REPO), "stephanie-personal")):  # legacy sibling
         if cand and os.path.isdir(cand):
             return cand
