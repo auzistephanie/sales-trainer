@@ -56,6 +56,13 @@ Flags：
 （`bootstrap_empty_repo`），再照正常 Git Data API 流程推其餘檔案。得一個檔嘅話
 bootstrap 就係唯一嗰個 commit（唔會多開一個 chore commit）。
 
+⚠️ **唯一已知例外**「一次 run＝一個 commit」：全新零 commit repo **同時有 >1 個檔**
+要 bootstrap 嗰次，會變成 2 個 commit（bootstrap 一個 ＋ 其餘檔一個）。呢個唔係
+設計選擇，係 GitHub API 硬限制——Git Data API（`POST .../git/blobs`）喺 repo
+連一個 commit 都未有嗰陣會 409 "Git Repository is empty."，一定要用 Contents API
+（只能一次一個檔）先種到第一個 commit。呢個情況一世人淨會撞一次（新 repo bootstrap
+嗰下），跟 06-STANDARDS 例外表 catnu-app 記錄嘅做法。
+
 Token 來源：.env（GITHUB_TOKEN）→ 環境變數 GITHUB_TOKEN/GH_TOKEN → .gh-token 檔（gitignored）。
 Token 只喺本機讀，唔會 print。
 
@@ -74,6 +81,7 @@ import socket
 import subprocess
 import sys
 import urllib.error
+import urllib.parse
 import urllib.request
 
 try:
@@ -282,7 +290,11 @@ def bootstrap_empty_repo(owner, repo, token, path, content, message):
     # 用**用家自己**條 message，唔好寫死 "chore: bootstrap"（2026-08-16 閘 3 捉到）：
     # 如果本機得一個檔，bootstrap 完就已經同步，之後 tree 係空 → "Nothing to push"，
     # 用家條 message 會完全冇用過，而 repo 第一個 commit 變咗個無意義嘅 chore。
-    api("PUT", f"/repos/{owner}/{repo}/contents/{path}", token, {
+    # 2026-08-16（閘 3 捉到）：path 直接拼入 URL 冇 encode，中文／空格檔名會撞
+    # urllib 報錯。呢個 codebase 成日有中文檔名（見 working_files() 嘅
+    # core.quotepath=false 註解），一定要 quote。safe="/" 保留路徑分隔符。
+    encoded_path = urllib.parse.quote(path, safe="/")
+    api("PUT", f"/repos/{owner}/{repo}/contents/{encoded_path}", token, {
         "message": message,
         "content": base64.b64encode(content).decode(),
     })
