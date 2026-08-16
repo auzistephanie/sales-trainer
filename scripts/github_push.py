@@ -397,11 +397,12 @@ def run_review(agent, diff, message):
     return m.group(1).upper(), out
 
 
-def review_gate(agent, base, remote, local, deletions, token, message):
-    """閘 3 主邏輯。→ True = 可以繼續推，False = BLOCK。"""
-    changed = [p for p in local
-               if remote.get(p) != git_blob_sha(open(os.path.join(REPO, p), "rb").read())]
-    touched = changed + list(deletions)
+def review_gate(agent, base, remote, changed, deletions, token, message):
+    """閘 3 主邏輯。→ True = 可以繼續推，False = BLOCK。
+
+    `changed` 由 main() 計好傳入（純本機比對），確保呢個閘喺任何 GitHub 寫入之前行。
+    """
+    touched = list(changed) + list(deletions)
     code_changes = [p for p in touched if not DOC_ONLY_RE.search(p)]
     if not code_changes:
         print("   ⏭️  閘 3 跳過（今次全部係文檔改動，冇實質 code）")
@@ -589,18 +590,10 @@ def main():
     ref = api("GET", f"{base}/ref/heads/main", token, ok_statuses=(404, 409))
     is_empty_repo = ref is None
     if is_empty_repo:
-        # 零 commit 嘅新 repo：Git Data API 完全寫唔到，先用 Contents API 種一個檔
-        # 開 main，之後照正常流程行（其餘檔案落下面 tree 一次過推）。
-        seed = working_files()
-        if not seed:
-            raise SystemExit("❌ 遠端係空 repo，但本機冇任何檔可以 bootstrap。")
-        with open(os.path.join(REPO, seed[0]), "rb") as f:
-            bootstrap_empty_repo(owner, repo, token, seed[0], f.read(), message)
-        print(f"   (空 repo 已用 Contents API bootstrap，種子檔：{seed[0]})")
-        ref = api("GET", f"{base}/ref/heads/main", token)
-        base_sha = ref["object"]["sha"]
-        base_tree = api("GET", f"{base}/commits/{base_sha}", token)["tree"]["sha"]
-        remote = remote_tree_map(base, base_tree, token)
+        # 零 commit 嘅新 repo：remote tree 當空，全部檔案都係「新增」。
+        # ⚠️ bootstrap 唔喺呢度做 —— 要等過晒三道閘先寫，否則閘 3 判 BLOCK
+        # 都已經有個種子檔推咗上 GitHub（2026-08-16 閘 3 捉到）。
+        base_sha, base_tree, remote = None, None, {}
     else:
         base_sha = ref["object"]["sha"]
         base_tree = api("GET", f"{base}/commits/{base_sha}", token)["tree"]["sha"]
@@ -652,45 +645,63 @@ def main():
         print("   點做：等 Drive sync 完再跑一次；真係要刪就帶 --allow-deletions。")
         raise SystemExit(3)
 
-    tree, uploaded = [], 0
+    # 邊啲檔真係要上（純本機計算，零 API 寫入）——閘 3 要喺任何寫入之前睇呢批。
+    changed = []
     for path in local:
         with open(os.path.join(REPO, path), "rb") as f:
             content = f.read()
-        if remote.get(path) == git_blob_sha(content):
-            continue  # 遠端已一致，唔使上
+        if remote.get(path) != git_blob_sha(content):
+            changed.append(path)
+
+    if not changed and not deletions:
+        print("Nothing to push — 遠端已同步。")
+        _record_baseline(base_sha)
+        return
+
+    # 2026-08-01：推之前一定列出檔案名單。見到唔係自己改嘅檔 → 停手（01-DISPATCH §7）。
+    _names = changed + list(deletions)
+    print(f"   準備推 {len(_names)} 個檔（{len(changed)} 更新 / {len(deletions)} 刪除）· {prefix}")
+    for _p in _names[:15]:
+        print(f"     · {_p}")
+    if len(_names) > 15:
+        print(f"     … 另外 {len(_names) - 15} 個")
+
+    # ── 閘 3：交叉 review（一定要喺任何 GitHub 寫入之前）───────────
+    if not o.no_review:
+        if not review_gate(agent, base, remote, changed, deletions, token, o.message):
+            raise SystemExit(4)
+
+    # ══ 過晒三道閘，由呢度先開始寫 GitHub ══
+    if is_empty_repo:
+        # Git Data API 喺 main 未存在時乜都寫唔到（連 POST blobs 都 409），
+        # 要先用 Contents API 種一個檔開 main。用家條 message 就係第一個 commit。
+        with open(os.path.join(REPO, changed[0]), "rb") as f:
+            bootstrap_empty_repo(owner, repo, token, changed[0], f.read(), message)
+        print(f"   (空 repo 已 bootstrap，種子檔：{changed[0]})")
+        base_sha = api("GET", f"{base}/ref/heads/main", token)["object"]["sha"]
+        base_tree = api("GET", f"{base}/commits/{base_sha}", token)["tree"]["sha"]
+        remote = remote_tree_map(base, base_tree, token)
+        changed = [p for p in changed
+                   if remote.get(p) != git_blob_sha(open(os.path.join(REPO, p), "rb").read())]
+        if not changed:
+            # 單檔 repo：bootstrap 就係唯一嗰個 commit，符合「一次 run＝一個 commit」。
+            _record_baseline(base_sha)
+            print(f"✅ Pushed to GitHub — {message} (首次 bootstrap，單檔)")
+            print(f"   1 更新 / 0 刪除 · commit {base_sha[:7]}")
+            return
+
+    tree, uploaded = [], 0
+    for path in changed:
+        with open(os.path.join(REPO, path), "rb") as f:
+            content = f.read()
         blob = api("POST", f"{base}/blobs", token, {
             "content": base64.b64encode(content).decode(),
             "encoding": "base64",
         })
         tree.append({"path": path, "mode": "100644", "type": "blob", "sha": blob["sha"]})
         uploaded += 1
-
     for path in deletions:
         tree.append({"path": path, "mode": "100644", "type": "blob", "sha": None})
-
-    if not tree:
-        if is_empty_repo:
-            # 單檔 repo：bootstrap 嗰下已經係用家條 message 嘅第一個 commit，
-            # 冇第二個 commit，符合「一次 run＝一個 commit」。
-            print(f"✅ Pushed to GitHub — {message} (首次 bootstrap，單檔)")
-            print(f"   1 更新 / 0 刪除 · commit {base_sha[:7]}")
-        else:
-            print("Nothing to push — 遠端已同步。")
-        _record_baseline(base_sha)
-        return
-
-    # 2026-08-01：推之前一定列出檔案名單。見到唔係自己改嘅檔 → 停手（01-DISPATCH §7）。
-    _names = [t["path"] for t in tree]
-    print(f"   準備推 {len(_names)} 個檔（{uploaded} 更新 / {len(deletions)} 刪除）· {prefix}")
-    for _p in _names[:15]:
-        print(f"     · {_p}")
-    if len(_names) > 15:
-        print(f"     … 另外 {len(_names) - 15} 個")
-
-    # ── 閘 3：交叉 review ────────────────────────────────────────
-    if not o.no_review:
-        if not review_gate(agent, base, remote, local, deletions, token, o.message):
-            raise SystemExit(4)
 
     tree_body = {"tree": tree}
     if base_tree:
