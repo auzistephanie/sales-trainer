@@ -38,10 +38,12 @@ Flags：
   所以：刪超過 DELETION_LIMIT（3）個檔就停手，要 --allow-deletions 先過。
 
 閘 2 — SHA 閘：
-  `.push-state/<repo>.json` 記住上次見到嘅 remote SHA（呢個 state 檔本身經 Drive
-  兩機共用）。今次攞到嘅 remote SHA 同上次唔同 = 有第二部機／session 喺你之後推過，
+  `.push-state/<repo>.json` 嘅 `seen[<機名>]` 記住**本機**上次同步到嘅 remote SHA。
+  今次攞到嘅 remote SHA 同本機 baseline 唔同 = 有第二部機／session 喺你之後推過，
   你手上份 base 係舊嘅 → 停手，要 --force 先過。
-  （2026-08-16 之前呢度淨係 print 一句警告然後照推，等於冇閘。）
+  ⚠️ baseline 一定要分機存：state 檔住喺 Drive 兩機共用，如果得一個共用 SHA，
+  A 機推完 sync 落 B 機就會令 B 機以為自己係最新，閘完全失效。
+  `--check` 只會喺「本機同遠端完全一致」時先更新 baseline。
 
 閘 3 — 交叉 review gate：
   推之前叫「另一個 AI」睇一次 diff：Codex 推 → Claude review；Claude 推 → Codex review。
@@ -141,6 +143,28 @@ def _save_state(**updates):
         print(f"⚠️ push-state 寫入失敗（{e}）— 閘 2 今次冇記錄")
 
 
+_HOST = socket.gethostname().split(".")[0]
+
+
+def _my_baseline(state=None):
+    """本機上次同步到嘅 remote SHA。
+
+    ⚠️ 一定要**分機**存（2026-08-16 修，Codex review 捉到）：
+    `.push-state/` 住喺 Google Drive，兩部機共用。舊版得一個 `last_seen_sha`——
+    A 機推完會將 state 更新做新 SHA 並 sync 落 B 機，B 機（working tree 仲係舊）
+    再推時見到 state == remote，閘 2 就放行，照樣覆蓋 A 機啲嘢。等於冇閘。
+    """
+    st = _load_state() if state is None else state
+    return (st.get("seen") or {}).get(_HOST)
+
+
+def _record_baseline(sha):
+    st = _load_state()
+    seen = dict(st.get("seen") or {})
+    seen[_HOST] = sha
+    _save_state(seen=seen, last_seen_sha=sha)
+
+
 def _agent_label():
     """[agent@機名] — 兩部機 × 兩個 agent，commit 一眼睇到邊個推。
 
@@ -151,8 +175,7 @@ def _agent_label():
     agent = (os.environ.get("AI_AGENT") or "").strip().lower()
     if not agent:
         agent = "codex" if os.environ.get("CODEX_HOME") else "claude"
-    host = socket.gethostname().split(".")[0]
-    return agent, f"[{agent}@{host}]"
+    return agent, f"[{agent}@{_HOST}]"
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -436,10 +459,17 @@ def parse_args(argv):
         elif a == "--no-review":
             o.no_review = True
         elif a == "--files":
-            o.files = [p.strip() for p in argv[i + 1:] if p.strip()]
+            # 只食到下一個 `--flag` 為止。舊版 `argv[i+1:]` + break 會將
+            # `--force`／`--no-review` 當成檔名，令旗標靜靜失效（Codex review 捉到）。
+            o.files = []
+            j = i + 1
+            while j < len(argv) and not argv[j].startswith("--"):
+                if argv[j].strip():
+                    o.files.append(argv[j].strip())
+                j += 1
             if not o.files:
                 raise SystemExit("❌ --files 後面要跟至少一個檔案路徑")
-            break
+            i = j - 1
         elif a.startswith("--"):
             raise SystemExit(f"❌ 唔識嘅參數：{a}\n{USAGE}")
         else:
@@ -474,15 +504,15 @@ def do_check(owner, repo, token, base):
     print(f"   遠端 HEAD：{_remote_head_info(owner, repo, token, base_sha)}")
 
     state = _load_state()
-    last = state.get("last_seen_sha")
+    last = _my_baseline(state)
     if last and last != base_sha:
         print(f"   ⚠️  遠端喺你上次見到之後變咗（{last[:7]} → {base_sha[:7]}）"
               f"— 另一部機／session 推過嘢。")
         print("      Google Drive sync 完未？未 sync 完就改嘢，你會覆蓋人哋。")
     elif last:
-        print(f"   ✅ 遠端同你上次見到嘅一樣（{last[:7]}）")
+        print(f"   ✅ 遠端同 {_HOST} 上次同步嘅一樣（{last[:7]}）")
     else:
-        print("   ℹ️  本機未推過呢個 repo，冇 baseline 可比。")
+        print(f"   ℹ️  {_HOST} 未有呢個 repo 嘅 baseline。")
 
     base_tree = api("GET", f"{base}/commits/{base_sha}", token)["tree"]["sha"]
     remote = remote_tree_map(base, base_tree, token)
@@ -493,7 +523,10 @@ def do_check(owner, repo, token, base):
     missing = [p for p in remote if p not in local_set]
 
     if not modified and not missing:
-        print("   ✅ 本機同遠端完全一致 — 可以安心開工。")
+        # 完全一致 = 實證本機已經同步，可以安全更新 baseline。
+        # （唔一致就唔准更新，否則 --check 會幫你抹走閘 2 個保護。）
+        _record_baseline(base_sha)
+        print("   ✅ 本機同遠端完全一致 — 可以安心開工（已更新 baseline）。")
         return 0
     if modified:
         print(f"   📝 本機有 {len(modified)} 個檔同遠端唔同：")
@@ -541,10 +574,12 @@ def main():
         base_tree = api("GET", f"{base}/commits/{base_sha}", token)["tree"]["sha"]
         remote = remote_tree_map(base, base_tree, token)
 
-        # ── 閘 2：SHA 閘 ──────────────────────────────────────────
-        last = _load_state().get("last_seen_sha")
+        # ── 閘 2：SHA 閘（baseline 分機存，見 _my_baseline）──────────
+        last = _my_baseline()
+        if not last:
+            print(f"ℹ️  閘 2：{_HOST} 未有呢個 repo 嘅 baseline（第一次推）— 今次跳過，之後就有得比")
         if last and last != base_sha and not o.force:
-            print(f"⛔ 閘 2：遠端 SHA 喺你上次見到之後變咗（{last[:7]} → {base_sha[:7]}）")
+            print(f"⛔ 閘 2：遠端 SHA 喺 {_HOST} 上次同步之後變咗（{last[:7]} → {base_sha[:7]}）")
             print("   即係另一部機／另一個 session 喺你之後推過嘢，你手上份 base 係舊嘅。")
             print(f"   遠端 HEAD：{_remote_head_info(owner, repo, token, base_sha)}")
             print("   點做：先跑 `python3 scripts/github_push.py --check` 睇差異，")
@@ -603,7 +638,7 @@ def main():
 
     if not tree:
         print("Nothing to push — 遠端已同步。")
-        _save_state(last_seen_sha=base_sha)
+        _record_baseline(base_sha)
         return
 
     # 2026-08-01：推之前一定列出檔案名單。見到唔係自己改嘅檔 → 停手（01-DISPATCH §7）。
@@ -634,7 +669,7 @@ def main():
     else:
         api("PATCH", f"{base}/refs/heads/main", token, {"sha": commit["sha"]})
 
-    _save_state(last_seen_sha=commit["sha"])
+    _record_baseline(commit["sha"])
     print(f"✅ Pushed to GitHub — {message}" + (" (首次 bootstrap)" if is_empty_repo else ""))
     print(f"   {uploaded} 更新 / {len(deletions)} 刪除 · commit {commit['sha'][:7]}")
 
