@@ -52,6 +52,10 @@ Flags：
   Reviewer 叫唔郁（未登入／app 冇開）→ fail-open 照推，但連續 REVIEW_FAIL_LIMIT（3）
   次失敗就轉 BLOCK，逼你去修。
 
+全新零 commit repo：先經 Contents API 用**用家條 commit message** 種一個檔開 `main`
+（`bootstrap_empty_repo`），再照正常 Git Data API 流程推其餘檔案。得一個檔嘅話
+bootstrap 就係唯一嗰個 commit（唔會多開一個 chore commit）。
+
 Token 來源：.env（GITHUB_TOKEN）→ 環境變數 GITHUB_TOKEN/GH_TOKEN → .gh-token 檔（gitignored）。
 Token 只喺本機讀，唔會 print。
 
@@ -265,6 +269,23 @@ def working_files():
 def remote_tree_map(base, tree_sha, token):
     data = api("GET", f"{base}/trees/{tree_sha}?recursive=1", token)
     return {e["path"]: e["sha"] for e in data.get("tree", []) if e["type"] == "blob"}
+
+
+def bootstrap_empty_repo(owner, repo, token, path, content, message):
+    """GitHub Git Data API（blobs/trees/commits）喺 `main` 未存在之前乜都寫唔到——
+    連 `POST .../git/blobs` 都會 409 "Git Repository is empty."。官方解法係用高一層嘅
+    Contents API，佢會由一個檔自動幫你開 initial commit ＋ default branch。
+
+    ⚠️ 2026-08-16：12 份 script 合流時由 venturenix 版做 base，漏咗呢個函數
+    （catnu 版先有）。閘 3 Codex review 捉返——單靠 `ok_statuses=(404, 409)` 唔夠，
+    因為 409 唔止出現喺 GET ref，POST blobs 一樣會撞。"""
+    # 用**用家自己**條 message，唔好寫死 "chore: bootstrap"（2026-08-16 閘 3 捉到）：
+    # 如果本機得一個檔，bootstrap 完就已經同步，之後 tree 係空 → "Nothing to push"，
+    # 用家條 message 會完全冇用過，而 repo 第一個 commit 變咗個無意義嘅 chore。
+    api("PUT", f"/repos/{owner}/{repo}/contents/{path}", token, {
+        "message": message,
+        "content": base64.b64encode(content).decode(),
+    })
 
 
 def fetch_remote_blob(base, sha, token):
@@ -568,7 +589,18 @@ def main():
     ref = api("GET", f"{base}/ref/heads/main", token, ok_statuses=(404, 409))
     is_empty_repo = ref is None
     if is_empty_repo:
-        base_sha, base_tree, remote = None, None, {}
+        # 零 commit 嘅新 repo：Git Data API 完全寫唔到，先用 Contents API 種一個檔
+        # 開 main，之後照正常流程行（其餘檔案落下面 tree 一次過推）。
+        seed = working_files()
+        if not seed:
+            raise SystemExit("❌ 遠端係空 repo，但本機冇任何檔可以 bootstrap。")
+        with open(os.path.join(REPO, seed[0]), "rb") as f:
+            bootstrap_empty_repo(owner, repo, token, seed[0], f.read(), message)
+        print(f"   (空 repo 已用 Contents API bootstrap，種子檔：{seed[0]})")
+        ref = api("GET", f"{base}/ref/heads/main", token)
+        base_sha = ref["object"]["sha"]
+        base_tree = api("GET", f"{base}/commits/{base_sha}", token)["tree"]["sha"]
+        remote = remote_tree_map(base, base_tree, token)
     else:
         base_sha = ref["object"]["sha"]
         base_tree = api("GET", f"{base}/commits/{base_sha}", token)["tree"]["sha"]
@@ -637,7 +669,13 @@ def main():
         tree.append({"path": path, "mode": "100644", "type": "blob", "sha": None})
 
     if not tree:
-        print("Nothing to push — 遠端已同步。")
+        if is_empty_repo:
+            # 單檔 repo：bootstrap 嗰下已經係用家條 message 嘅第一個 commit，
+            # 冇第二個 commit，符合「一次 run＝一個 commit」。
+            print(f"✅ Pushed to GitHub — {message} (首次 bootstrap，單檔)")
+            print(f"   1 更新 / 0 刪除 · commit {base_sha[:7]}")
+        else:
+            print("Nothing to push — 遠端已同步。")
         _record_baseline(base_sha)
         return
 
@@ -650,7 +688,7 @@ def main():
         print(f"     … 另外 {len(_names) - 15} 個")
 
     # ── 閘 3：交叉 review ────────────────────────────────────────
-    if not o.no_review and not is_empty_repo:
+    if not o.no_review:
         if not review_gate(agent, base, remote, local, deletions, token, o.message):
             raise SystemExit(4)
 
@@ -664,13 +702,11 @@ def main():
         commit_body["parents"] = [base_sha]
     commit = api("POST", f"{base}/commits", token, commit_body)
 
-    if is_empty_repo:
-        api("POST", f"{base}/refs", token, {"ref": "refs/heads/main", "sha": commit["sha"]})
-    else:
-        api("PATCH", f"{base}/refs/heads/main", token, {"sha": commit["sha"]})
+    # bootstrap 之後 main 一定已經存在，兩條路都係 PATCH。
+    api("PATCH", f"{base}/refs/heads/main", token, {"sha": commit["sha"]})
 
     _record_baseline(commit["sha"])
-    print(f"✅ Pushed to GitHub — {message}" + (" (首次 bootstrap)" if is_empty_repo else ""))
+    print(f"✅ Pushed to GitHub — {message}" + (" (含首次 bootstrap)" if is_empty_repo else ""))
     print(f"   {uploaded} 更新 / {len(deletions)} 刪除 · commit {commit['sha'][:7]}")
 
 
