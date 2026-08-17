@@ -85,7 +85,8 @@
 | POST `/negotiate` | `generate_negotiate_response` + `..._summary` | 多回合談判演練，寫 `negotiate_logs` |
 | POST `/debrief` | `generate_debrief` + `analyze_conversation` | 面試覆盤，寫 `debrief_logs` |
 | GET `/mbti/questions` · POST `/mbti/submit` | `mbti_checker.py` | 20 題 → 16 型，寫 `profiles.mbti` |
-| GET/POST/PATCH `/jobs` | `extract_job_from_url` 等 | 工作追蹤 CRUD |
+| GET/POST/PATCH `/jobs` | 前端直駁 Supabase（CRUD 冇經呢層） | 工作追蹤 CRUD（company/role/url/jd_text/status，jd_text 2026-08-17 加前端輸入） |
+| POST `/jobs/practice` | `generate_job_questions` | 對住某份 job 嘅 `jd_text` 出度身面試問題（2026-08-17，同 bot `job_q_` 掣共用邏輯；bot 版仲有嘅 Key Tips／真練習兩粒掣未跟） |
 | POST `/cv/tailor` (可選) | `generate_tailored_cv_content` + `build_cv_docx` | 生成 tailored CV .docx |
 
 驗證：前端每個 request 帶 `Authorization: Bearer <supabase_jwt>`；API 用 Supabase secret 驗 token 攞 `user_id`，所有讀寫鎖 `user_id`。

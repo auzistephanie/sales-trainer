@@ -428,10 +428,10 @@ def evaluate_response(user_response: str, scenario: dict, max_retries: int = 3, 
         try:
             resp = ai_client.chat.completions.create(
                 model="deepseek-v4-flash",
-                extra_body={"thinking": {"type": "disabled"}},
+                extra_body={"thinking": {"type": "enabled"}},
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.8,
-                max_tokens=1400,
+                max_tokens=3000,
             )
             return resp.choices[0].message.content
         except Exception as e:
@@ -484,10 +484,10 @@ def analyze_conversation(conversation: str, profile: dict) -> str:
     try:
         resp = ai_client.chat.completions.create(
             model="deepseek-v4-flash",
-            extra_body={"thinking": {"type": "disabled"}},
+            extra_body={"thinking": {"type": "enabled"}},
             messages=[{"role": "user", "content": prompt}],
             temperature=0.7,
-            max_tokens=1200,
+            max_tokens=2500,
         )
         return resp.choices[0].message.content
     except Exception as e:
@@ -1486,10 +1486,10 @@ Offer details：{offer_details}
     try:
         resp = ai_client.chat.completions.create(
             model="deepseek-v4-flash",
-            extra_body={"thinking": {"type": "disabled"}},
+            extra_body={"thinking": {"type": "enabled"}},
             messages=[{"role": "user", "content": prompt}],
             temperature=0.8,
-            max_tokens=600,
+            max_tokens=2000,
         )
         return resp.choices[0].message.content
     except Exception as e:
@@ -1529,10 +1529,10 @@ def generate_negotiate_summary(history: list) -> str:
     try:
         resp = ai_client.chat.completions.create(
             model="deepseek-v4-flash",
-            extra_body={"thinking": {"type": "disabled"}},
+            extra_body={"thinking": {"type": "enabled"}},
             messages=[{"role": "user", "content": prompt}],
             temperature=0.6,
-            max_tokens=600,
+            max_tokens=2000,
         )
         return resp.choices[0].message.content
     except Exception as e:
@@ -1566,10 +1566,10 @@ def generate_debrief(job_info: dict, debrief_text: str) -> str:
     try:
         resp = ai_client.chat.completions.create(
             model="deepseek-v4-flash",
-            extra_body={"thinking": {"type": "disabled"}},
+            extra_body={"thinking": {"type": "enabled"}},
             messages=[{"role": "user", "content": prompt}],
             temperature=0.6,
-            max_tokens=900,
+            max_tokens=2500,
         )
         return resp.choices[0].message.content
     except Exception as e:
