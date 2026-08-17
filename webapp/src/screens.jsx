@@ -363,11 +363,33 @@ function TailorCvTool({ profile }) {
   )
 }
 
+function JobPractice({ job }) {
+  const [out, setOut] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [err, setErr] = useState('')
+  useEffect(() => {
+    if (!job.jd_text?.trim()) { setErr('呢份工未貼 JD，撳「刪除」重新加一份連埋 JD 先可以度身練習。'); return }
+    setLoading(true); setErr(''); setOut('')
+    api.jobsPractice({ company: job.company, role: job.role, jd_text: job.jd_text })
+      .then(r => setOut(r.result))
+      .catch(e => setErr('生成失敗：' + e.message))
+      .finally(() => setLoading(false))
+  }, [job.id])
+  return (
+    <div className="result-box" style={{ marginTop: 4, whiteSpace: 'pre-wrap' }}>
+      {loading && 'AI 度緊身…'}
+      {err && <div className="err">{err}</div>}
+      {out}
+    </div>
+  )
+}
+
 function JobsManager({ profile }) {
   const [jobs, setJobs] = useState([])
   const [adding, setAdding] = useState(false)
-  const [f, setF] = useState({ company: '', role: '', url: '', status: '儲低' })
+  const [f, setF] = useState({ company: '', role: '', url: '', jd_text: '', status: '儲低' })
   const [loading, setLoading] = useState(true)
+  const [openPractice, setOpenPractice] = useState(null)
 
   function load() {
     supabase.from('coach_jobs').select('*').order('created_at', { ascending: false })
@@ -377,8 +399,8 @@ function JobsManager({ profile }) {
 
   async function add() {
     if (!f.company.trim()) return
-    await supabase.from('coach_jobs').insert({ user_id: profile.id, company: f.company, role: f.role, url: f.url, status: f.status })
-    setF({ company: '', role: '', url: '', status: '儲低' }); setAdding(false); load()
+    await supabase.from('coach_jobs').insert({ user_id: profile.id, company: f.company, role: f.role, url: f.url, jd_text: f.jd_text, status: f.status })
+    setF({ company: '', role: '', url: '', jd_text: '', status: '儲低' }); setAdding(false); load()
   }
   async function setStatus(id, status) { await supabase.from('coach_jobs').update({ status }).eq('id', id); load() }
   async function del(id) { await supabase.from('coach_jobs').delete().eq('id', id); load() }
@@ -393,6 +415,7 @@ function JobsManager({ profile }) {
           <input className="field" placeholder="公司名 *" value={f.company} onChange={e => setF({ ...f, company: e.target.value })} />
           <input className="field" placeholder="職位" value={f.role} onChange={e => setF({ ...f, role: e.target.value })} />
           <input className="field" placeholder="JD 連結（可留空）" value={f.url} onChange={e => setF({ ...f, url: e.target.value })} />
+          <textarea className="field" placeholder="貼上 JD 全文（可留空，但要有先度身練習得到）" value={f.jd_text} onChange={e => setF({ ...f, jd_text: e.target.value })} />
           <select className="field" value={f.status} onChange={e => setF({ ...f, status: e.target.value })}>
             {JOB_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
           </select>
@@ -410,7 +433,7 @@ function JobsManager({ profile }) {
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <div style={{ flex: 1 }}>
                 <h3>{j.company}</h3>
-                <p>{j.role || '—'}{j.url ? ' · 有 JD' : ''}</p>
+                <p>{j.role || '—'}{j.jd_text ? ' · 有 JD' : ''}</p>
               </div>
               <button onClick={() => del(j.id)} style={{ background: 'none', border: 'none', color: 'var(--brick)', fontSize: 18 }}>✕</button>
             </div>
@@ -418,6 +441,11 @@ function JobsManager({ profile }) {
               value={j.status} onChange={e => setStatus(j.id, e.target.value)}>
               {JOB_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
             </select>
+            <button className="submit-a" style={{ background: 'var(--brick-dk)' }}
+              onClick={() => setOpenPractice(openPractice === j.id ? null : j.id)}>
+              🎯 度身練習{openPractice === j.id ? '（收埋）' : ''}
+            </button>
+            {openPractice === j.id && <JobPractice job={j} />}
           </div>
         ))}
     </>
@@ -622,11 +650,18 @@ export function Stats({ stats, onPractice }) {
 /* ---------------- PROFILE ---------------- */
 function ThemePicker({ profile, onSaved }) {
   const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
   const [custom, setCustom] = useState(profile?.custom_accent_color || '#c1503a')
   const activeKey = profile?.custom_accent_color ? null : (profile?.theme || 'brick')
   async function save(patch) {
-    setBusy(true)
-    try { await supabase.from('coach_profiles').update(patch).eq('id', profile.id); await onSaved?.() } catch (e) {}
+    setBusy(true); setErr('')
+    try {
+      const { error } = await supabase.from('coach_profiles').update(patch).eq('id', profile.id)
+      if (error) throw error
+      await onSaved?.()
+    } catch (e) {
+      setErr('儲存失敗，試多次或者重新登入：' + (e.message || e))
+    }
     setBusy(false)
   }
   return (
@@ -643,6 +678,7 @@ function ThemePicker({ profile, onSaved }) {
         <input type="color" value={custom} onChange={e => setCustom(e.target.value)} />
         <button className="cus-apply" disabled={busy} onClick={() => save({ custom_accent_color: custom })}>套用</button>
       </div>
+      {err && <div className="err">{err}</div>}
     </div>
   )
 }

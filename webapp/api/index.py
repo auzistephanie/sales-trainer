@@ -20,6 +20,7 @@ from interview_trainer import (
     generate_debrief,
     generate_tailored_cv_content, generate_cover_letter_from_jd,
     build_cv_docx, build_cover_letter_docx,
+    generate_job_questions,
 )
 from mbti_checker import MBTI_QUESTIONS, calculate_mbti, MBTI_QUICK_DESC
 
@@ -219,6 +220,19 @@ def cv_tailor():
         "cv_docx_b64": base64.b64encode(cv_bytes).decode("ascii"),
         "cover_letter_docx_b64": base64.b64encode(letter_bytes).decode("ascii"),
     })
+
+
+@app.route("/api/app/jobs/practice", methods=["POST"])
+def jobs_practice():
+    """對住某份 job 嘅 JD 生成度身面試問題（generate_job_questions，同 bot 版共用，冧邏輯都冇改）。"""
+    _, err = require_user()
+    if err: return err
+    b = body()
+    jd = (b.get("jd_text") or "").strip()
+    if not jd:
+        return jsonify({"error": "呢份工未貼 JD，冇料畀 AI 度身"}), 400
+    job = {"company": b.get("company", ""), "role": b.get("role", ""), "jd": jd}
+    return jsonify({"result": generate_job_questions(job)})
 
 
 @app.route("/api/app/tip", methods=["POST", "GET"])

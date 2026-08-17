@@ -48,6 +48,7 @@ export const api = {
   negotiateSummary: (opts) => authFetch('/api/app/negotiate/summary', opts),
   debrief: (opts) => authFetch('/api/app/debrief', opts),
   tailorCv: (opts) => authFetch('/api/app/cv/tailor', opts),
+  jobsPractice: (opts) => authFetch('/api/app/jobs/practice', opts),
   tip: () => authFetch('/api/app/tip', {}),
   mbtiQuestions: () => authFetch('/api/app/mbti/questions', {}),
   mbtiSubmit: (opts) => authFetch('/api/app/mbti/submit', opts)
