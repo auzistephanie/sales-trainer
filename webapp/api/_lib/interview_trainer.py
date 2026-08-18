@@ -754,8 +754,11 @@ Write a VERY SHORT, tailored, ATS-friendly cover letter.
 Other rules:
 - Use ONLY facts/achievements/employers/skills from the candidate's actual CV — NEVER fabricate anything.
 - Mirror the Job Description's key words where the CV supports them (ATS).
-- Cite 1–2 real, specific achievements/metrics — no generic filler ("team player", "hard-working", "passionate").
+- Cite 1–2 real, specific achievements/metrics that DIRECTLY match THIS JD's actual requirements — relevance to this specific role matters more than how impressive it sounds. Do NOT default to the most recent/senior job's story if an earlier or different role is a better match for this JD.
+- No generic filler ("team player", "hard-working", "passionate").
 - Keep company names, titles and dates exactly as in the CV.
+- Mention any one past employer's name at most ONCE across the whole letter — do not repeat the same past company in both paragraphs.
+- Do NOT mention degree/education, language ability, or generic clerical skills (e.g. Chinese/English typing).
 
 【Applicant's CV】
 {cv_text[:3500]}
@@ -768,7 +771,7 @@ Job Description:
 
 【Structure】
 - Greeting: "Dear Hiring Manager,"
-- Para 1 (2–3 sentences): who you are + the exact role/company + your single strongest matching qualification.
+- Para 1 (2–3 sentences): who you are + the exact role/company + the qualification/experience most directly relevant to THIS JD's requirements (not necessarily your most recent job).
 - Para 2 (2–3 sentences): one concrete achievement matched to a JD requirement + brief why-this-company + a one-line call to action.
 - Plain text only, no markdown.
 - Sign off with exactly: Yours sincerely,\n[Your Name]
@@ -808,7 +811,7 @@ CRITICAL RULES:
 4. Tailor the summary and bullets to naturally mirror the JD's exact keywords/phrasing, but only where the CV genuinely supports it.
 5. Core competencies: 8–12 items, split naturally into operations/admin skills AND technology/automation/tools, all drawn from the CV.
 6. Each experience bullet: achievement-oriented (action verb + what + result), quantified whenever the CV gives numbers. Give 3–4 bullets per role (keep the strongest).
-7. Do NOT mention degree/education or language ability inside the professional summary.
+7. Do NOT mention degree/education, language ability, or generic clerical skills (e.g. Chinese/English typing) inside the professional summary.
 8. Extract education, certifications, languages and expected salary from the CV if present. If a field is genuinely absent, return "" or [] — NEVER write placeholder text like "not specified" or "N/A".
 
 【Original CV (full)】
