@@ -1414,6 +1414,14 @@ def _send_ats_followup_result(confirmed: list, old_score, new_ats: dict, drive_l
 # ── Message ───────────────────────────────────────────────────────
 
 def handle_message(text):
+    # A pasted job URL is always a new job request.  Check it before any
+    # pending JD/ATS state, otherwise an old follow-up state treats the URL
+    # as a skill confirmation and never starts the JobsDB fetch flow.
+    url_match = _URL_RE.search(text)
+    if url_match and not text.startswith("/"):
+        handle_url_message(url_match.group(0).rstrip(".,)>]"))
+        return
+
     # JD session flow（waiting for JD text after failed link fetch）
     jd_sess = load_jd_session()
     if jd_sess and not text.startswith("/"):
@@ -1496,11 +1504,6 @@ def handle_message(text):
             return
 
     # URL 偵測（唔係 session 狀態，直接貼 link）
-    url_match = _URL_RE.search(text)
-    if url_match and not text.startswith("/"):
-        handle_url_message(url_match.group(0))
-        return
-
     # AddJob flow（優先於 setup flow）
     addjob = load_addjob_session()
     if addjob and not text.startswith("/"):
