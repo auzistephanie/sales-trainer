@@ -853,7 +853,10 @@ def fetch_jd_via_firecrawl(url: str) -> str:
                 "url": url,
                 "formats": ["markdown"],
                 "onlyMainContent": True,
-                "proxy": "stealth",
+                # auto lets Firecrawl try the basic proxy first, then
+                # automatically upgrade to an enhanced proxy when JobsDB's
+                # Cloudflare page blocks the first attempt.
+                "proxy": "auto",
             },
             timeout=45,
         )
@@ -873,10 +876,13 @@ def fetch_jd_via_firecrawl(url: str) -> str:
 def handle_url_message(url: str):
     """用戶發咗一條 URL — 嘗試抓 JD，然後問佢要做咩。"""
     send_telegram("🔍 抓取職位資料中⋯⋯")
-    jd_text = fetch_jd_via_jina(url)
+    is_jobsdb = "jobsdb." in url.lower()
+    # JobsDB currently serves Cloudflare challenges to Jina.  Try the
+    # enhanced Firecrawl path first for JobsDB; keep Jina first for other
+    # job boards so this change does not add cost/latency globally.
+    jd_text = fetch_jd_via_firecrawl(url) if is_jobsdb else fetch_jd_via_jina(url)
     if not jd_text:
-        # Jina 抓唔到 → 試 Firecrawl stealth proxy
-        jd_text = fetch_jd_via_firecrawl(url)
+        jd_text = fetch_jd_via_jina(url) if is_jobsdb else fetch_jd_via_firecrawl(url)
 
     if not jd_text:
         # 兩個都抓唔到，叫用戶貼文字

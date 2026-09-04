@@ -1,5 +1,7 @@
 # 改版歷史
 
+- **2026-09-04**：JobsDB 仍被 Cloudflare 擋住時，改為 JobsDB 優先使用 Firecrawl `auto` proxy（自動由 basic 升級 enhanced），其他網站維持 Jina 優先；修正 JobsDB link 只能回覆「未能自動抓取內容」而無法進入 CV／Cover Letter 流程。
+
 - **2026-09-02**：修正 Telegram 貼 JobsDB link 被舊 ATS follow-up session 截走嘅問題。URL routing 而家會先於 JD／ATS session state 執行，確保貼新 link 一定重新進入 JobsDB 抓取流程，之後可以生成 Tailored CV 同 Cover Letter；同時移除 URL 尾隨常見標點，避免連結失效。
 
 - **2026-08-17**：**Cover Letter「揀最強資歷」改做「揀最貼題資歷」+ CV/CL summary 加多一項排除項** **背景**：Stephanie 發現 Cover Letter 成日提到「Smark Global」（佢最近一份工），有陣時同申請緊嗰份工完全冇關；追查 `generate_cover_letter_from_jd()` 個 prompt 發現係叫 AI 揀「single strongest matching qualification」（最勁），唔係「最貼題」，AI 自然次次揀返最近/最資深嗰份工嘅成就，唔理同呢份 JD 夾唔夾。**做咗**（`interview_trainer.py` + webapp mirror 同步）：① Cover Letter prompt：「揀最強」改做「揀同呢份 JD 要求最直接相關」，明寫「唔准預設用返最近份工，如果舊份工或者第二份工更貼題就用嗰份」；加一條「同一間舊公司名成封信最多出現一次，唔准兩段都提」。② Cover Letter + CV `professional summary`（`generate_tailored_cv_content` 第 7 條，範圍淨係 summary，唔郁 core_competencies/bullets——Stephanie 確認）都加返「唔准提學歷/畢業、語言能力、或者中文/英文打字呢類文書技能」（CV 舊版已有教育/語言排除，今次加多打字）。**核實**：`python3 -m py_compile` 兩份 interview_trainer.py 過；⚠️ 未做——未實跑生成過 Cover Letter/Tailored CV 對比改前改後結果，push 後要 Stephanie 用返舊出過事嗰份 JD 生成多一次，核實 Smark Global 冇再無端端出現、summary 冇再提學歷/語言/打字。
