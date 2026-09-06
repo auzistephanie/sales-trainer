@@ -753,7 +753,9 @@ Write a VERY SHORT, tailored, ATS-friendly cover letter.
 
 Other rules:
 - Use ONLY facts/achievements/employers/skills from the candidate's actual CV — NEVER fabricate anything.
+- Review EVERY role in the CV before drafting. Choose the 1–2 work experiences most relevant to this JD; do not default to the latest or most prominent employer (for example, Smarkglobal) unless it is genuinely the strongest match.
 - Mirror the Job Description's key words where the CV supports them (ATS).
+- Evidence check before finishing: every company, title, date, skill, responsibility and number in the letter must have a clear matching statement in the CV. If evidence is absent or ambiguous, omit the claim rather than infer or embellish it.
 - Cite 1–2 real, specific achievements/metrics that DIRECTLY match THIS JD's actual requirements — relevance to this specific role matters more than how impressive it sounds. Do NOT default to the most recent/senior job's story if an earlier or different role is a better match for this JD.
 - No generic filler ("team player", "hard-working", "passionate").
 - Keep company names, titles and dates exactly as in the CV.
@@ -829,6 +831,7 @@ CRITICAL RULES:
 6. Each experience bullet: achievement-oriented (action verb + what + result), quantified whenever the CV gives numbers. Give 3–4 bullets per role (keep the strongest).
 7. Do NOT mention degree/education, language ability, or generic clerical skills (e.g. Chinese/English typing) inside the professional summary.
 8. Extract education, certifications, languages and expected salary from the CV if present. If a field is genuinely absent, return "" or [] — NEVER write placeholder text like "not specified" or "N/A".{extra_rule}
+9. Before returning JSON, audit every field against the original CV. Remove any claim that cannot be located in the CV; never infer dates, scope, tools, metrics or seniority from the JD.
 
 【Original CV (full)】
 {cv_text[:9000]}

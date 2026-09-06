@@ -1,4 +1,5 @@
 # 改版歷史
+- **2026-09-06**：Cover Letter 會掃描 CV 全部工作經驗，按 JD 相關度揀 1–2 段；CV／Cover Letter 加入 evidence check，無法由原始 CV 證實嘅內容一律唔寫。
 
 - **2026-09-04**：JobsDB 仍被 Cloudflare 擋住時，改為 JobsDB 優先使用 Firecrawl `auto` proxy（自動由 basic 升級 enhanced），其他網站維持 Jina 優先；修正 JobsDB link 只能回覆「未能自動抓取內容」而無法進入 CV／Cover Letter 流程。
 
