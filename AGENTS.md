@@ -114,7 +114,6 @@ python3 scripts/github_push.py --check
 | 本 repo 架構、模組、專屬 DoD | 同層 `CLAUDE.md` |
 | 全 repo 共用 standards（正本） | `stephanie-personal/docs/ai-governance/STANDARDS.md` |
 | 新 repo 裝 push kit | `stephanie-personal/docs/PUSH-SETUP.md` |
-| 新機設置 | `stephanie-personal/docs/NEW-MACHINE-SETUP.md` |
 
 **方向性決定先問，細節唔使問**（正本 STANDARDS §S3）：
 - **要停低問**：不可逆 **＋** 出咗 repo（真人／客戶收到訊息、live flow 變咗、錢郁咗、刪 production 資料）
