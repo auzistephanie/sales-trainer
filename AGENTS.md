@@ -10,7 +10,7 @@
 StephaniedeMacBook-Air 呢部機，全部 12 個 repo 已經搬去 `~/dev/<repo>`，**完全脫離 Google
 Drive**（唔再係「Drive Mirror 資料夾」，`.git` 唔會再俾 Drive sync 干擾）。Ian-MacBook-Air
 跟 `stephanie-personal/docs/GITHUB-ONLY-MIGRATION-SECOND-MAC.md` 另揀時間搬——喺搬之前，嗰部
-機嘅 repo 路徑可能仍然喺 Drive 底下，兩部機䷯徑暫時唔一致係預期之內，**唔緊要**，`git remote`
+機嘅 repo 路徑可能仍然喺 Drive 底下，兩部機路徑暫時唔一致係預期之內，**唔緊要**，`git remote`
 指去同一個 GitHub repo 就得，唔靠路徑一致嚟同步。
 
 ---
