@@ -94,6 +94,7 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # ── 閘門參數（想調鬆／緊改呢度）────────────────────────────────────────
 DELETION_LIMIT = 3        # 閘 1：一次過刪多過咁多個遠端檔就停手
+GATE_3_ENABLED = False    # 閘 3（交叉 review）總開關 — 2026-09-12 Stephanie 取消 Codex，冇第二個 agent 冚唔到「交叉」，停用；淨留閘1/閘2。想復原（重新裝 Codex）改返 True 即可
 REVIEW_TIMEOUT = 300      # 閘 3：reviewer 幾多秒唔覆就當叫唔郁
 REVIEW_FAIL_LIMIT = 3     # 閘 3：連續咁多次叫唔郁就由 fail-open 轉 BLOCK
 REVIEW_DIFF_MAX = 120_000 # 閘 3：diff 超過咁多字就截斷（免爆 reviewer context）
@@ -117,7 +118,7 @@ CODEX_BIN_CANDIDATES = (
 # 2026-08-16 升級：由「事後 print 警告」變成「事前 hard stop」（閘 2）。
 def _resolve_personal():
     for cand in (os.environ.get("STEPHANIE_PERSONAL_DIR"),
-                 os.path.expanduser("~/dev/stephanie-personal"),
+                 os.path.expanduser("~/Desktop/Stephanie-Google Drive/dev/stephanie-personal"),
                  os.path.join(os.path.dirname(REPO), "stephanie-personal")):  # legacy sibling
         if cand and os.path.isdir(cand):
             return cand
@@ -414,6 +415,9 @@ def review_gate(agent, base, remote, changed, deletions, token, message):
 
     `changed` 由 main() 計好傳入（純本機比對），確保呢個閘喺任何 GitHub 寫入之前行。
     """
+    if not GATE_3_ENABLED:
+        print("   ⏭️  閘 3 已停用（GATE_3_ENABLED = False，2026-09-12 Codex 取消）")
+        return True
     touched = list(changed) + list(deletions)
     code_changes = [p for p in touched if not DOC_ONLY_RE.search(p)]
     if not code_changes:
