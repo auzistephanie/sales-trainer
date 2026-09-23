@@ -1,4 +1,6 @@
 # 改版歷史
+- **2026-09-23（三）**：每日自動搵工（`scan_new_jobs`）修復——Jina 被 JobsDB Cloudflare 擋，而且舊 `/jobs?keywords=` 網址已冇職位卡，所以一直冇推。改用 ScraperAPI 並行抓 `/<slug>-jobs`，由 `data-automation` 抽職位卡（職位／公司／地點／人工／簡介／連結）再畀 DeepSeek 揀。關鍵字改為 profile 目標職位＋admissions officer／student recruitment／education coordinator（最多 3 個）。本機實測 3 個關鍵字 ~23s 抽到 47 個職位。docs 更正 cron endpoint 要帶 `?key=CRON_SECRET`。
+
 - **2026-09-23（二）**：JobsDB 改用 ScraperAPI 抓（`fetch_jd_via_scraperapi`，普通模式＋`country_code=hk`，實測 ~5s 拎到完整 JD，免 ultra premium）；用 `html.parser` 抽 `data-automation` 欄位（title／advertiser／location／work-type／jobAdDetails）。抓唔到先叫用戶貼 JD。需要 Vercel env `SCRAPERAPI_KEY`。
 
 - **2026-09-23**：JobsDB link 唔再嘗試自動抓取 —— Firecrawl log 證實 JobsDB/SEEK 用 Cloudflare instant-block（HTTP 403），stealth／enhanced＋HK proxy 同 Jina 全部即刻被擋。`handle_url_message` 見到 `jobsdb.` 即刻叫用戶貼 JD（慳 credits、唔使等），其他網站恢復 Jina→Firecrawl 次序；失敗訊息由「可能係需要登入」改做「網站可能擋咗自動抓取」。同日 sync 本機同 GitHub：CHANGELOG／AGENTS／interview_trainer×2 跟 GitHub，`github_push.py` 合併（保留 GATE_3 停用＋加 `~/dev/stephanie-personal` 路徑），CLAUDE.md 跟本機（STANDARDS 寫法；GitHub 版仍指住已搬走嘅 02-JUDGMENT）。

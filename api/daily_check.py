@@ -1,5 +1,5 @@
 """api/daily_check.py — Vercel cron（每日 10:00 HKT）：Job follow-up 提醒 + 逢週日求職週報 + 自動搵工推送"""
-import sys, os, json, uuid
+import sys, os, json, uuid, re, html
 from pathlib import Path
 from urllib.parse import quote
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -112,30 +112,74 @@ def send_weekly_report():
 
 # ── 自動搵工推送（JobsDB scan，2026-07-03）────────────────────────
 
-JOBSDB_SEARCH_KEYWORDS = ["education", "education coordinator", "edtech"]
+# 2026-09-23：Jina 被 JobsDB Cloudflare 擋＋舊 `/jobs?keywords=` 網址已冇職位卡，
+# 改用 ScraperAPI（HK IP）抓 `/<slug>-jobs` 搜尋頁，由 data-automation 抽職位卡。
+# 關鍵字：profile 目標職位（如有）先，再補預設，最多 3 個（~3 credits/日）。
+DEFAULT_SEARCH_KEYWORDS = ["admissions officer", "student recruitment", "education coordinator"]
+MAX_SEARCH_KEYWORDS = 3
 MAX_JOBS_PUSHED_PER_DAY = 3
 SEEN_JOBS_KEY = "seen_scanned_jobs"
 SCANNED_JOB_TTL = 14 * 24 * 3600  # 14 日
 
 
-def _fetch_listing_via_jina(url: str) -> str:
-    """抓 JobsDB 搜尋結果頁（用 Jina Reader，連 X-With-Links-Summary 拎返職位連結）。"""
-    jina_key = os.environ.get("JINA_API_KEY", "").strip()
-    headers = {
-        "Accept": "text/plain",
-        "X-Return-Format": "markdown",
-        "X-With-Links-Summary": "true",
-    }
-    if jina_key:
-        headers["Authorization"] = f"Bearer {jina_key}"
+def _search_keywords(profile: dict) -> list:
+    kws, seen = [], set()
+    for k in [profile.get("job_title", "")] + DEFAULT_SEARCH_KEYWORDS:
+        k = (k or "").strip()
+        if k and k.lower() not in seen:
+            seen.add(k.lower())
+            kws.append(k)
+    return kws[:MAX_SEARCH_KEYWORDS]
+
+
+def _jobsdb_search_url(keyword: str) -> str:
+    slug = re.sub(r"[^a-z0-9]+", "-", keyword.lower()).strip("-")
+    return f"https://hk.jobsdb.com/{slug}-jobs"
+
+
+def _parse_job_cards(page_html: str) -> list:
+    """由 JobsDB 搜尋頁 HTML 抽職位卡（data-automation 欄位）。"""
+    jobs = []
+    for card in re.split(r'(?=<article[^>]*data-job-id=")', page_html)[1:]:
+        jid = re.search(r'data-job-id="(\d+)"', card)
+        if not jid:
+            continue
+
+        def field(name):
+            m = re.search(r'data-automation="' + name + r'"[^>]*>(.*?)</(?:a|span|div)>', card, re.S)
+            return html.unescape(re.sub(r"<[^>]+>", "", m.group(1))).strip() if m else ""
+
+        title = field("jobTitle")
+        if not title:
+            continue
+        jobs.append({
+            "title": title, "company": field("jobCompany"),
+            "location": field("jobLocation"), "salary": field("jobSalary"),
+            "summary": field("jobShortDescription"), "listed": field("jobListingDate"),
+            "url": f"https://hk.jobsdb.com/job/{jid.group(1)}",
+        })
+    return jobs
+
+
+def _fetch_listing_via_scraperapi(url: str) -> list:
+    api_key = os.environ.get("SCRAPERAPI_KEY", "").strip()
+    if not api_key:
+        print("[job_scan] 冇 SCRAPERAPI_KEY，跳過")
+        return []
     try:
-        resp = req.get(f"https://r.jina.ai/{url}", headers=headers, timeout=45)
-        if resp.ok and len(resp.text) > 200:
-            return resp.text[:6000]
-        print(f"[job_scan] fetch status={resp.status_code} len={len(resp.text)} url={url}")
+        resp = req.get("https://api.scraperapi.com/",
+                       params={"api_key": api_key, "url": url, "country_code": "hk"},
+                       timeout=25)
+        if not resp.ok:
+            print(f"[job_scan] status={resp.status_code} url={url}")
+            return []
+        jobs = _parse_job_cards(resp.text)
+        if not jobs:
+            print(f"[job_scan] 0 job cards url={url} len={len(resp.text)}")
+        return jobs
     except Exception as e:
         print(f"[job_scan] fetch failed url={url}: {e}")
-    return ""
+        return []
 
 
 def _load_seen_jobs() -> set:
@@ -150,7 +194,7 @@ def _rank_and_extract_jobs(listings_text: str, profile: dict, seen: set) -> list
     """用 DeepSeek 由掃描到嘅搜尋結果原始文字揀最啱 profile 嘅職位。"""
     from openai import OpenAI
     ai_client = OpenAI(api_key=os.getenv("DEEPSEEK_API_KEY"), base_url="https://api.deepseek.com")
-    prompt = f"""你係求職顧問。以下係 JobsDB 搜尋結果頁面嘅原始內容（可能包含多個搜尋關鍵字嘅結果，加埋頁尾嘅連結清單）。
+    prompt = f"""你係求職顧問。以下係 JobsDB 搜尋結果（每行一個職位：職位 | 公司 | 地點 | 人工 | 刊登時間 | 簡介 | 連結）。
 根據呢個求職者嘅背景，揀出最啱嘅職位空缺（最多 5 個，冇夠啱嘅可以少過 5 個甚至 0 個，唔好夾硬揀）。
 
 【求職者背景】
@@ -164,7 +208,7 @@ def _rank_and_extract_jobs(listings_text: str, profile: dict, seen: set) -> list
 只輸出 JSON array，每個 object 要有：
 - title：職位名稱
 - company：公司名稱
-- url：從內容嘅連結清單揀返嗰個職位最相關嘅完整連結（唔好作連結，抽唔到就留空字串）
+- url：嗰行最尾嘅完整連結（照抄，唔好作）
 - reason：一句話講點解啱佢
 
 唔要任何其他文字或 markdown code block。"""
@@ -208,12 +252,22 @@ def scan_new_jobs() -> int:
     if not profile.get("job_title") and not profile.get("industry"):
         return 0
 
-    combined_text = ""
-    for kw in JOBSDB_SEARCH_KEYWORDS:
-        url  = f"https://hk.jobsdb.com/jobs?keywords={quote(kw)}"
-        text = _fetch_listing_via_jina(url)
-        if text:
-            combined_text += f"\n\n=== 關鍵字：{kw} ===\n{text}"
+    from concurrent.futures import ThreadPoolExecutor
+    kws = _search_keywords(profile)
+    with ThreadPoolExecutor(max_workers=len(kws)) as ex:
+        results = list(ex.map(lambda k: _fetch_listing_via_scraperapi(_jobsdb_search_url(k)), kws))
+
+    combined_text, urls_seen = "", set()
+    for kw, jobs_found in zip(kws, results):
+        lines = []
+        for j in jobs_found[:20]:
+            if j["url"] in urls_seen:
+                continue
+            urls_seen.add(j["url"])
+            lines.append(" | ".join(x for x in (j["title"], j["company"], j["location"],
+                                                j["salary"], j["listed"], j["summary"], j["url"]) if x))
+        if lines:
+            combined_text += f"\n\n=== 關鍵字：{kw} ===\n" + "\n".join(lines)
 
     if not combined_text.strip():
         return 0

@@ -26,7 +26,7 @@ AI functions in interview_trainer.py：`generate_job_questions(job)` / `generate
 
 ## Daily Check — Follow-up 提醒 + 求職週報（2026-07-03）
 
-`api/daily_check.py` — 獨立 Vercel serverless function，⚠️ **唔用 Vercel 內建 cron**（`vercel.json` 冇 `crons` 設定，2026-07-02 已移除），改用外部服務 **cron-job.org** 每日 10:00 HKT 打 `https://sales-trainer-wheat.vercel.app/api/daily_check`（endpoint 冇加 auth，GET/POST 都得）。`vercel.json` 仍然要喺 catch-all rewrite 之前加一條 `/api/daily_check` → 自己嘅明確 rewrite，否則會俾 `/(.*) → /api/webhook` 嗰條吞晒。
+`api/daily_check.py` — 獨立 Vercel serverless function，⚠️ **唔用 Vercel 內建 cron**（`vercel.json` 冇 `crons` 設定，2026-07-02 已移除），改用外部服務 **cron-job.org** 每日 10:00 HKT 打 `https://sales-trainer-wheat.vercel.app/api/daily_check`（⚠️ 要帶 `?key=<CRON_SECRET>`，唔帶會 403；GET/POST 都得）。`vercel.json` 仍然要喺 catch-all rewrite 之前加一條 `/api/daily_check` → 自己嘅明確 rewrite，否則會俾 `/(.*) → /api/webhook` 嗰條吞晒。
 
 **Follow-up 提醒**（`check_followups()`）：status 係 Applied / Phone Screen 嘅 job，`last_touch`（冇就用 `applied_date`）超過 7 日冇郁 → 推 Telegram，附 3 個掣：
 - `job_followup_{id}` → 重置 `last_touch` = 今日
@@ -42,10 +42,10 @@ AI functions in interview_trainer.py：`generate_job_questions(job)` / `generate
 - 最弱題型（跨全部歷史 `qtype_scores` 揀平均分最低嗰個，同 `/stats` 用同一套邏輯）
 
 **自動搵工推送**（`scan_new_jobs()`，同一個 daily_check 內一齊跑）：
-- 搜尋關鍵字 `JOBSDB_SEARCH_KEYWORDS = ["education", "education coordinator", "edtech"]`（Stephanie 2026-07-03 揀嘅，想改直接改呢個 list）
-- 用 Jina Reader 抓 `https://hk.jobsdb.com/jobs?keywords=<關鍵字>`（`X-With-Links-Summary: true` 攞埋職位連結），冇 `profile.job_title`/`industry` 就唔掃
+- 搜尋關鍵字（2026-09-23）：`profile.job_title` 先，再補 `DEFAULT_SEARCH_KEYWORDS = ["admissions officer", "student recruitment", "education coordinator"]`，去重後最多 3 個
+- 用 ScraperAPI（`SCRAPERAPI_KEY`，`country_code=hk`，3 個關鍵字並行）抓 `https://hk.jobsdb.com/<slug>-jobs`，由 `data-automation`（jobTitle/jobCompany/jobLocation/jobSalary/jobShortDescription）抽職位卡再畀 DeepSeek 揀；舊 `/jobs?keywords=` 網址已冇職位卡、Jina 被 Cloudflare 擋（2026-09-23）。冇 `profile.job_title`/`industry` 就唔掃
 - DeepSeek 對住 profile 揀最啱嘅職位（最多 `MAX_JOBS_PUSHED_PER_DAY=3`），dedup 用 Redis `seen_scanned_jobs`（title+company 組合，上限 500 個）
 - 每個推薦存 `scanned_job:{short_id}`（TTL 14 日），Telegram 推送附 2 個掣：
   - `scanjob_open_{id}` → 直接call現有嘅 `handle_url_message(url)`，等於自己貼咗個 link，會出返 Cover Letter / Tailored CV / 加入追蹤 嗰個選單
   - `scanjob_skip_{id}` → 淨係刪走個 scanned_job 記錄
-- ⚠️ 風險：JobsDB 改版／加強反爬會令 Jina 抓唔到嘢，`scan_new_jobs()` 靜靜地回傳 0（唔會報錯，但都唔會推嘢）——如果幾日都冇推薦，check下係咪呢度斷咗
+- ⚠️ 風險：JobsDB 改版／加強反爬會令 ScraperAPI 抓唔到嘢（或 `data-automation` 名改咗，log 會見 `0 job cards`），`scan_new_jobs()` 靜靜地回傳 0（唔會報錯，但都唔會推嘢）——如果幾日都冇推薦，check下係咪呢度斷咗
