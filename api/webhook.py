@@ -873,24 +873,104 @@ def fetch_jd_via_firecrawl(url: str) -> str:
     return ""
 
 
+class _JobsdbExtractor(__import__("html.parser").parser.HTMLParser):
+    """由 JobsDB HTML 抽 data-automation 欄位（標題／公司／地點／類型／JD 內文）。"""
+    WANT = ("job-detail-title", "advertiser-name", "job-detail-location",
+            "job-detail-work-type", "job-detail-salary", "jobAdDetails")
+
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.out, self._stack = {}, []   # _stack: [key, depth]
+
+    def handle_starttag(self, tag, attrs):
+        if tag in ("br", "img", "hr", "input", "meta", "link"):
+            if self._stack and tag == "br":
+                self.out[self._stack[-1][0]].append("\n")
+            return
+        key = dict(attrs).get("data-automation")
+        if self._stack:
+            self._stack[-1][1] += 1
+            if tag in ("p", "li", "div", "h1", "h2", "h3", "h4", "ul"):
+                self.out[self._stack[-1][0]].append("\n")
+            if tag == "li":
+                self.out[self._stack[-1][0]].append("• ")
+        elif key in self.WANT and key not in self.out:
+            self.out[key] = []
+            self._stack.append([key, 1])
+
+    def handle_endtag(self, tag):
+        if not self._stack or tag in ("br", "img", "hr", "input", "meta", "link"):
+            return
+        self._stack[-1][1] -= 1
+        if self._stack[-1][1] == 0:
+            self._stack.pop()
+
+    def handle_data(self, data):
+        if self._stack:
+            self.out[self._stack[-1][0]].append(data)
+
+
+def fetch_jd_via_scraperapi(url: str) -> str:
+    """用 ScraperAPI（HK IP）抓 JobsDB JD。
+
+    2026-09-23 新增：JobsDB/SEEK 對 Firecrawl／Jina 做 Cloudflare instant-block，
+    ScraperAPI 普通模式＋country_code=hk 實測 200、~7s 拎到完整 JD。
+    需要 SCRAPERAPI_KEY，冇 key 就跳過。timeout 30s，唔會超 Vercel 60s。
+    """
+    import re
+    api_key = os.environ.get("SCRAPERAPI_KEY", "").strip()
+    if not api_key:
+        return ""
+    try:
+        resp = req.get(
+            "https://api.scraperapi.com/",
+            params={"api_key": api_key, "url": url, "country_code": "hk"},
+            timeout=30,
+        )
+        if not resp.ok:
+            print(f"[scraperapi fetch] status={resp.status_code} body={resp.text[:200]}")
+            return ""
+        p = _JobsdbExtractor()
+        p.feed(resp.text)
+        f = {k: re.sub(r"[ \t]+", " ", "".join(v)) for k, v in p.out.items()}
+        f = {k: re.sub(r"\n\s*\n+", "\n", v).strip() for k, v in f.items()}
+        body = f.get("jobAdDetails", "")
+        if len(body) < 200:
+            print(f"[scraperapi fetch] jobAdDetails len={len(body)} — 可能被擋或版面改咗")
+            return ""
+        head = [
+            f"Job title: {f['job-detail-title']}" if f.get("job-detail-title") else "",
+            f"Company: {f['advertiser-name']}" if f.get("advertiser-name") else "",
+            f"Location: {f['job-detail-location']}" if f.get("job-detail-location") else "",
+            f"Work type: {f['job-detail-work-type']}" if f.get("job-detail-work-type") else "",
+            f"Salary: {f['job-detail-salary']}" if f.get("job-detail-salary") else "",
+        ]
+        return ("\n".join(h for h in head if h) + "\n\n" + body)[:4000]
+    except Exception as e:
+        print(f"[scraperapi fetch] {e}")
+        return ""
+
+
 def handle_url_message(url: str):
     """用戶發咗一條 URL — 嘗試抓 JD，然後問佢要做咩。"""
+    send_telegram("🔍 抓取職位資料中⋯⋯")
     # 2026-09-23：JobsDB/SEEK 用 Cloudflare instant-block（HTTP 403），Firecrawl
     # stealth/enhanced＋HK proxy、Jina 全部即刻被擋（Firecrawl log 證實）。
-    # 唔再嘗試抓，直接叫用戶貼 JD —— 慳 credits 同等待時間。
+    # JobsDB 只行 ScraperAPI（HK IP 實測過到）；失敗就直接叫用戶貼 JD。
     if "jobsdb." in url.lower():
-        save_jd_session({"state": "waiting_jd_text", "url": url})
-        send_telegram(
-            "🔒 JobsDB 有反爬蟲保護，擋咗自動抓取。\n\n"
-            "請喺 JobsDB 複製 JD 文字貼落嚟，我幫你繼續：",
-            reply_markup={"inline_keyboard": [[{"text": "❌ 取消", "callback_data": "jd_cancel"}]]}
-        )
-        return
-
-    send_telegram("🔍 抓取職位資料中⋯⋯")
-    jd_text = fetch_jd_via_jina(url)
-    if not jd_text:
-        jd_text = fetch_jd_via_firecrawl(url)
+        jd_text = fetch_jd_via_scraperapi(url)
+        if not jd_text:
+            save_jd_session({"state": "waiting_jd_text", "url": url})
+            send_telegram(
+                "🔒 JobsDB 有反爬蟲保護，今次抓唔到。\n\n"
+                "請喺 JobsDB 複製 JD 文字貼落嚟，我幫你繼續：",
+                reply_markup={"inline_keyboard": [[{"text": "❌ 取消", "callback_data": "jd_cancel"}]]}
+            )
+            return
+    else:
+        jd_text = fetch_jd_via_jina(url)
+        if not jd_text:
+            jd_text = fetch_jd_via_firecrawl(url)
 
     if not jd_text:
         # 兩個都抓唔到，叫用戶貼文字
