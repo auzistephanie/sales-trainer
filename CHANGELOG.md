@@ -1,4 +1,6 @@
 # 改版歷史
+- **2026-09-23**：JobsDB link 唔再嘗試自動抓取 —— Firecrawl log 證實 JobsDB/SEEK 用 Cloudflare instant-block（HTTP 403），stealth／enhanced＋HK proxy 同 Jina 全部即刻被擋。`handle_url_message` 見到 `jobsdb.` 即刻叫用戶貼 JD（慳 credits、唔使等），其他網站恢復 Jina→Firecrawl 次序；失敗訊息由「可能係需要登入」改做「網站可能擋咗自動抓取」。同日 sync 本機同 GitHub：CHANGELOG／AGENTS／interview_trainer×2 跟 GitHub，`github_push.py` 合併（保留 GATE_3 停用＋加 `~/dev/stephanie-personal` 路徑），CLAUDE.md 跟本機（STANDARDS 寫法；GitHub 版仍指住已搬走嘅 02-JUDGMENT）。
+
 - **2026-09-06**：Cover Letter 會掃描 CV 全部工作經驗，按 JD 相關度揀 1–2 段；CV／Cover Letter 加入 evidence check，無法由原始 CV 證實嘅內容一律唔寫。
 
 - **2026-09-04**：JobsDB 仍被 Cloudflare 擋住時，改為 JobsDB 優先使用 Firecrawl `auto` proxy（自動由 basic 升級 enhanced），其他網站維持 Jina 優先；修正 JobsDB link 只能回覆「未能自動抓取內容」而無法進入 CV／Cover Letter 流程。

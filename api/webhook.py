@@ -875,20 +875,28 @@ def fetch_jd_via_firecrawl(url: str) -> str:
 
 def handle_url_message(url: str):
     """用戶發咗一條 URL — 嘗試抓 JD，然後問佢要做咩。"""
+    # 2026-09-23：JobsDB/SEEK 用 Cloudflare instant-block（HTTP 403），Firecrawl
+    # stealth/enhanced＋HK proxy、Jina 全部即刻被擋（Firecrawl log 證實）。
+    # 唔再嘗試抓，直接叫用戶貼 JD —— 慳 credits 同等待時間。
+    if "jobsdb." in url.lower():
+        save_jd_session({"state": "waiting_jd_text", "url": url})
+        send_telegram(
+            "🔒 JobsDB 有反爬蟲保護，擋咗自動抓取。\n\n"
+            "請喺 JobsDB 複製 JD 文字貼落嚟，我幫你繼續：",
+            reply_markup={"inline_keyboard": [[{"text": "❌ 取消", "callback_data": "jd_cancel"}]]}
+        )
+        return
+
     send_telegram("🔍 抓取職位資料中⋯⋯")
-    is_jobsdb = "jobsdb." in url.lower()
-    # JobsDB currently serves Cloudflare challenges to Jina.  Try the
-    # enhanced Firecrawl path first for JobsDB; keep Jina first for other
-    # job boards so this change does not add cost/latency globally.
-    jd_text = fetch_jd_via_firecrawl(url) if is_jobsdb else fetch_jd_via_jina(url)
+    jd_text = fetch_jd_via_jina(url)
     if not jd_text:
-        jd_text = fetch_jd_via_jina(url) if is_jobsdb else fetch_jd_via_firecrawl(url)
+        jd_text = fetch_jd_via_firecrawl(url)
 
     if not jd_text:
         # 兩個都抓唔到，叫用戶貼文字
         save_jd_session({"state": "waiting_jd_text", "url": url})
         send_telegram(
-            "⚠️ 未能自動抓取內容（可能係需要登入）\n\n"
+            "⚠️ 未能自動抓取內容（網站可能擋咗自動抓取）\n\n"
             "請直接貼上 JD 文字，我幫你繼續：",
             reply_markup={"inline_keyboard": [[{"text": "❌ 取消", "callback_data": "jd_cancel"}]]}
         )
